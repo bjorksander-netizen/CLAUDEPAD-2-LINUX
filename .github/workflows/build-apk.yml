@@ -44,6 +44,15 @@ jobs:
           pip install "websockets==${{ matrix.websockets }}" cryptography \
                       evdev python-xlib
 
+      - name: Gerbang keamanan test (wajib lulus dulu)
+        working-directory: server
+        run: |
+          # test_safety.py membuktikan safe_harness memblokir aksi sistem-nyata
+          # tanpa CLAUDEPAD_ALLOW_REAL=1 dan mode --sandbox mensimulasikannya.
+          # Dijalankan PALING AWAL supaya pelanggaran keamanan menggagalkan CI
+          # sebelum suite lain sempat menyentuh sistem.
+          python tests/test_safety.py
+
       - name: Uji peta tombol
         working-directory: server
         run: python tests/test_keymaps.py
