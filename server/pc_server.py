@@ -35,6 +35,7 @@ except ImportError:
                      "Jalankan: pip install -r requirements.txt")
 
 import binary_protocol
+import clipboard
 import crypto_box
 import input_core as core
 import system_ctl
@@ -48,13 +49,12 @@ from input_core import (CLIENTS, DISCOVERY_PORT, HOSTNAME, LOGQ, PLATFORM,
                         record_failed_attempt, reset_failed_attempts,
                         session_type, volume_get)
 
-APP_VERSION = "3.6"
+APP_VERSION = "3.7"
 
-# Versi APK yang diterima. Server Windows mensyaratkan kecocokan persis;
-# di sini v3.5 ikut diterima supaya APK CLAUDEPAD-2 yang sudah beredar
-# tetap bisa dipakai apa adanya dengan server Linux. Fitur baru
-# (platform, caps) hanya dipakai oleh APK 3.6 ke atas.
-COMPATIBLE_APP_VERSIONS = {"3.6", "3.5"}
+# Versi APK yang diterima. v3.7 membawa clipboard dua arah & now-playing
+# MPRIS; protokol boleh berubah (tidak ada kewajiban kompatibilitas dengan
+# versi Windows), jadi versi lain ditolak.
+COMPATIBLE_APP_VERSIONS = {"3.7"}
 
 # RSA-2048 keypair: digenerate sekali saat server start.
 _RSA_KEYPAIR = None
@@ -169,6 +169,36 @@ async def scrollinfo_poller(reply, stop_event):
     await stop_event.wait()
 
 
+# -------------------------------------------------- Clipboard sync (v3.7) ----
+async def clipboard_poller(reply, stop_event, conn):
+    """
+    Pantau clipboard PC tiap ~1 detik. Bila isinya berubah DAN sinkronisasi
+    nyala untuk koneksi ini, dorong ke HP (auto:true).
+
+    Anti-loop: konten yang barusan ditulis server sendiri (dari clipset,
+    tercatat di conn["last_server_write"]) tidak dipantulkan kembali.
+
+    Keamanan: poller hanya membaca lewat clipboard.read(). Di mode sandbox
+    atau saat harness test aktif, read() sudah disimulasikan sehingga di
+    sini TIDAK PERNAH ada subprocess wl-paste/xclip.
+    """
+    last = None
+    while not stop_event.is_set():
+        try:
+            cur = clipboard.read()
+        except Exception:                                      # noqa: BLE001
+            cur = None
+        if cur is not None and cur != last:
+            if conn.get("clipsync", True) and conn.get("last_server_write") != cur:
+                reply({"t": "clip", "ok": True, "s": cur, "auto": True})
+            conn.pop("last_server_write", None)
+            last = cur
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=1.0)
+        except asyncio.TimeoutError:
+            pass
+
+
 # ---------------------------------------------------------------- Handler ---
 async def handle(ws):
     authed = False
@@ -180,6 +210,10 @@ async def handle(ws):
     ACTIVE_SOCKETS.add(ws)
     stop_poller = asyncio.Event()
     poller_task = None
+    clip_task = None
+    # State per-koneksi (bukan global): sinkronisasi clipboard default nyala,
+    # dan catatan anti-loop untuk konten yang server tulis dari clipset.
+    conn = {"clipsync": True}
 
     # Matikan algoritma Nagle. Tanpa ini paket gerakan kursor yang mungil
     # ditahan menunggu paket lain, dan kursor terasa tersendat.
@@ -227,7 +261,7 @@ async def handle(ws):
                     except Exception:                          # noqa: BLE001
                         m = None
                     if m is not None:
-                        handle_message(m, reply)
+                        handle_message(m, reply, conn)
                         continue
                 try:
                     raw = raw.decode("utf-8")
@@ -323,6 +357,8 @@ async def handle(ws):
                     stop_poller.clear()
                     poller_task = asyncio.create_task(
                         scrollinfo_poller(reply, stop_poller))
+                    clip_task = asyncio.create_task(
+                        clipboard_poller(reply, stop_poller, conn))
 
                     await ws.send(json.dumps({
                         "t": "auth_ok",
@@ -349,7 +385,7 @@ async def handle(ws):
                     await ws.send(json.dumps({"t": "auth_fail", "reason": "pin"}))
                     log(f"[!] {peer} PIN salah")
                 continue
-            handle_message(m, reply)
+            handle_message(m, reply, conn)
     except websockets.ConnectionClosed:
         pass
     except Exception as e:                                     # noqa: BLE001
@@ -358,6 +394,8 @@ async def handle(ws):
         stop_poller.set()
         if poller_task is not None:
             poller_task.cancel()
+        if clip_task is not None:
+            clip_task.cancel()
         ACTIVE_SOCKETS.discard(ws)
         CLIENTS.pop(peer, None)
         log(f"[-] {peer} terputus")
@@ -467,7 +505,7 @@ def run_gui(minimized=False):
     import tkinter as tk
 
     root = tk.Tk()
-    root.title("CLAUDEPAD")
+    root.title("CLAUDEPAD" + (" [SANDBOX]" if core.is_sandbox() else ""))
     root.geometry("560x660")
     root.minsize(480, 560)
     root.configure(bg=BG)
@@ -733,8 +771,10 @@ def run_console():
     init_backend()
     core.write_default_gestures()
     start_server_thread()
+    mode = "  [SANDBOX - aksi daya/radio/kecerahan disimulasikan]" \
+        if core.is_sandbox() else ""
     print("=" * 52)
-    print(f"  CLAUDEPAD Server v{APP_VERSION} (linux, konsol)")
+    print(f"  CLAUDEPAD Server v{APP_VERSION} (linux, konsol){mode}")
     print(f"  Desktop : {desktop_name()} / {session_type()}")
     print(f"  Input   : {core.BACKEND.name}")
     print(f"  PIN     : {core.PIN}")
@@ -761,7 +801,14 @@ if __name__ == "__main__":
                         help="Mulai terminimalkan ke area notifikasi")
     parser.add_argument("--input-backend", choices=["uinput", "xtest", "xdotool"],
                         help="Paksa backend input tertentu")
+    parser.add_argument("--sandbox", action="store_true",
+                        help="Mode sandbox: simulasi aksi daya/radio/kecerahan "
+                             "(tidak menyentuh sistem; aman untuk uji jalur penuh)")
     args, _unknown = parser.parse_known_args()
+
+    # Mode sandbox: flag baris perintah ATAU env CLAUDEPAD_SANDBOX=1.
+    if args.sandbox or os.environ.get("CLAUDEPAD_SANDBOX") == "1":
+        core.set_sandbox(True)
 
     if args.input_backend:
         _forced = args.input_backend

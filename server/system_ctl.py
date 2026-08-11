@@ -16,6 +16,31 @@ import subprocess
 
 IS_WINDOWS = False
 
+# ================================================================ SANDBOX ====
+# Mode uji: saat aktif, semua aksi berdampak-nyata (daya, kecerahan)
+# DISIMULASIKAN, tidak menyentuh mesin. Diaktifkan lewat --sandbox /
+# CLAUDEPAD_SANDBOX=1 (lihat pc_server.py). Perilaku NONAKTIF tidak berubah.
+SANDBOX = False
+
+
+def set_sandbox(flag):
+    global SANDBOX
+    SANDBOX = bool(flag)
+
+
+def is_sandbox():
+    return SANDBOX
+
+
+def _sandbox_log(msg):
+    """Tulis pesan ke log server (input_core.log). Import lambat untuk
+    menghindari circular import: input_core mengimpor modul ini."""
+    try:
+        from input_core import log
+    except ImportError:
+        return
+    log(msg)
+
 
 def _has(cmd):
     return shutil.which(cmd) is not None
@@ -158,6 +183,9 @@ def brightness_get():
 
 def brightness_step(delta):
     """Naik/turunkan kecerahan sebesar delta persen. (berhasil, pesan)."""
+    if SANDBOX:
+        _sandbox_log(f"sandbox: simulasi brightness_step({delta})")
+        return True, f"kecerahan {delta:+d}% (simulasi sandbox)"
     cur = brightness_get()
     if cur is None:
         return False, ("kecerahan tidak didukung - tidak ada backlight, "
@@ -270,6 +298,12 @@ def supported_power_actions():
 
 def power_action(action):
     """shutdown / restart / sleep / hibernate / logoff / lock / screenoff."""
+    if SANDBOX:
+        if action in ("shutdown", "restart", "sleep", "hibernate",
+                      "logoff", "lock", "screenoff"):
+            _sandbox_log(f"sandbox: simulasi power_action({action})")
+            return True, f"{action} disimulasikan (sandbox)"
+        return False, "aksi daya tidak dikenal"
     if action == "lock":
         return _lock_session()
     if action == "screenoff":

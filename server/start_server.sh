@@ -14,4 +14,6 @@ if [ ! -x "$VENV/bin/python" ]; then
   "$VENV/bin/pip" install -r "$HERE/requirements.txt"
 fi
 
+# Semua argumen diteruskan ke pc_server.py, termasuk --sandbox (mode uji
+# yang menyimulasikan aksi daya/radio/kecerahan tanpa menyentuh sistem).
 exec "$VENV/bin/python" "$HERE/pc_server.py" "$@"

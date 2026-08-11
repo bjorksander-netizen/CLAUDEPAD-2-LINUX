@@ -28,6 +28,8 @@ import time
 
 from paths import resource_path, data_path
 
+import clipboard
+import mpris
 import system_ctl
 
 WS_PORT = 8765
@@ -581,6 +583,12 @@ def init_backend(prefer=None):
     Mengembalikan nama backend yang terpilih.
     """
     global BACKEND, BACKEND_NOTE
+    if SANDBOX:
+        # Mode uji: TIDAK BOLEH membuat perangkat virtual / koneksi X nyata.
+        BACKEND = _NullBackend()
+        BACKEND_NOTE = "sandbox: backend input dinonaktifkan"
+        log(f"[i] {BACKEND_NOTE}")
+        return "none"
     order = ["uinput", "xtest", "xdotool"]
     if prefer in order:
         order = [prefer] + [o for o in order if o != prefer]
@@ -789,6 +797,9 @@ def volume_get():
 
 
 def volume_set(percent):
+    if SANDBOX:
+        log(f"sandbox: simulasi volume_set({percent})")
+        return True
     percent = max(0, min(100, int(percent)))
     tool = _volume_tool()
     if not tool:
@@ -809,6 +820,9 @@ def volume_set(percent):
 
 
 def volume_mute_toggle():
+    if SANDBOX:
+        log("sandbox: simulasi volume_mute_toggle")
+        return True
     tool = _volume_tool()
     if tool == "wpctl":
         rc, _ = _run(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"])
@@ -825,6 +839,27 @@ def volume_mute_toggle():
 
 
 # ================================================================ Radio ======
+# ============================================================== Sandbox ======
+# Mode uji global: saat aktif, semua fungsi berdampak-nyata (radio, daya,
+# kecerahan) DISIMULASIKAN alih-alih menyentuh sistem. Diaktifkan lewat
+# --sandbox / CLAUDEPAD_SANDBOX=1 (lihat pc_server.py). Perilaku NONAKTIF
+# (produksi) tidak berubah sama sekali.
+SANDBOX = False
+
+
+def set_sandbox(flag):
+    """Aktifkan/nonaktifkan mode sandbox (input_core + system_ctl)."""
+    global SANDBOX
+    SANDBOX = bool(flag)
+    system_ctl.set_sandbox(SANDBOX)
+    log(f"[i] Mode sandbox {'AKTIF' if SANDBOX else 'nonaktif'} - "
+        f"aksi daya/radio/kecerahan disimulasikan")
+
+
+def is_sandbox():
+    return SANDBOX
+
+
 def _nmcli_radio(which):
     """Toggle wifi lewat NetworkManager. (ok, pesan)."""
     rc, out = _run(["nmcli", "radio", which])
@@ -851,6 +886,11 @@ def _rfkill_toggle(kind):
 
 def toggle_radio(which):
     """Nyalakan/matikan 'wifi', 'bluetooth', atau 'hotspot' di PC."""
+    if SANDBOX:
+        log(f"sandbox: simulasi radio {which}")
+        if which in ("wifi", "bluetooth", "hotspot"):
+            return True, f"{which} disimulasikan (sandbox)"
+        return False, "perangkat tidak dikenal"
     if which == "wifi":
         if _has("nmcli"):
             res = _nmcli_radio("wifi")
@@ -917,11 +957,36 @@ def _wifi_device():
 
 
 # ============================================================= Dispatch ======
-def handle_message(m, reply):
+def clip_set(text, ctx=None):
+    """
+    Tulis teks ke clipboard PC. `ctx` adalah dict state per-koneksi dari
+    pc_server.handle() (bukan global): {clipsync, last_server_write}.
+
+    Saat sinkronisasi clipboard nonaktif untuk koneksi ini, permintaan
+    ditolak. Konten yang ditulis dicatat di ctx["last_server_write"] supaya
+    poller clipboard TIDAK memantulkannya kembali ke HP (anti-loop).
+    """
+    if ctx is not None and not ctx.get("clipsync", True):
+        return False, "sinkronisasi clipboard nonaktif (clipsync off)"
+    if not clipboard.write(text):
+        return False, "tidak bisa menulis clipboard (tool clipboard tidak ada)"
+    if ctx is not None:
+        ctx["last_server_write"] = text
+    return True, ""
+
+
+def clip_get():
+    """Baca isi clipboard PC saat ini: (ok, teks, msg)."""
+    s = clipboard.read()
+    return True, s, ""
+
+
+def handle_message(m, reply, ctx=None):
     """
     Proses satu pesan protokol. `reply` adalah callable(dict) untuk balasan.
-    Bentuk pesannya identik dengan versi Windows - inilah yang membuat APK
-    yang sama bisa dipakai tanpa perubahan.
+    `ctx` (opsional) adalah state per-koneksi: clipsync + anti-loop clipboard
+    dari pc_server.handle(). Bentuk pesannya identik dengan versi Windows -
+    inilah yang membuat APK yang sama bisa dipakai tanpa perubahan.
     """
     t = m.get("t")
     if t == "move":
@@ -968,6 +1033,24 @@ def handle_message(m, reply):
         which = m.get("d", "")
         ok, msg = toggle_radio(which)
         reply({"t": "radio_result", "d": which, "ok": ok, "msg": msg})
+    elif t == "clipset":
+        ok, msg = clip_set(str(m.get("s") or ""), ctx)
+        reply({"t": "clipset_result", "ok": ok, "msg": msg})
+    elif t == "clipget":
+        ok, s, msg = clip_get()
+        reply({"t": "clip", "ok": ok, "s": s, "msg": msg})
+    elif t == "clipsync":
+        on = bool(m.get("on", True))
+        if ctx is not None:
+            ctx["clipsync"] = on
+        log(f"[i] Sinkronisasi clipboard koneksi ini: "
+            f"{'nyala' if on else 'mati'}")
+        reply({"t": "clipsync_result", "ok": True})
+    elif t == "npget":
+        reply({"t": "np", **mpris.query()})
+    elif t == "npseek":
+        ok, msg = mpris.seek(m.get("pos_us"))
+        reply({"t": "npseek_result", "ok": ok, "msg": msg})
     elif t == "ping":
         reply({"t": "pong"})
     return t
@@ -1094,6 +1177,8 @@ def local_ips():
 # ============================================================== Firewall =====
 def _firewall_tool():
     """'ufw', 'firewalld', atau '' kalau mesin tidak memakai firewall."""
+    if SANDBOX:
+        return ""
     if _has("ufw"):
         rc, out = _run(["ufw", "status"])
         # Tanpa root, ufw menolak dengan pesan izin - itu tetap berarti
@@ -1110,6 +1195,9 @@ def firewall_status():
     True kalau port CLAUDEPAD bisa dilewati. Mesin tanpa firewall aktif
     juga True - tidak ada yang perlu diperbaiki di sana.
     """
+    if SANDBOX:
+        log("sandbox: simulasi firewall_status")
+        return True
     tool = _firewall_tool()
     if not tool:
         return True
@@ -1140,6 +1228,9 @@ def fix_firewall():
     Buka port lewat pkexec (prompt kata sandi grafis), memakai skrip
     terpisah agar tidak ada perintah panjang yang di-quote berlapis.
     """
+    if SANDBOX:
+        log("sandbox: simulasi fix_firewall")
+        return True
     tool = _firewall_tool()
     if not tool:
         log("[i] Tidak ada firewall aktif - tidak ada yang perlu diperbaiki.")
@@ -1201,4 +1292,7 @@ def capabilities():
                   or (r == "hotspot" and _has("nmcli"))],
         "scrollinfo": False,
         "usb": _has("adb"),
+        # Fitur v3.7: clipboard dua arah & now-playing MPRIS.
+        "clipboard": clipboard.available(),
+        "nowplaying": mpris.available(),
     }
