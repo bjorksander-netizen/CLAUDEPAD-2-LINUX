@@ -159,8 +159,13 @@ object ClipboardSync {
 
     private fun currentText(): String? {
         val cm = clipboard ?: return null
+        val ctx = appContext ?: return null
         return try {
-            cm.primaryClip?.coerceToText(appContext)?.toString()
+            val clip = cm.primaryClip ?: return null
+            // ClipData.Item.coerceToText(Context) — bukan method ClipData.
+            // Clipboard kosong (itemCount 0) → null, bukan crash.
+            if (clip.itemCount == 0) null
+            else clip.getItemAt(0).coerceToText(ctx).toString()
         } catch (e: Exception) {
             null
         }
