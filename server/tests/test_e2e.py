@@ -149,8 +149,10 @@ def test_linux_layer():
     check("scrollinfo dimatikan di linux", core.get_active_scroll_info() is None)
 
     # Aksi daya wajib SELALU mengembalikan (bool, str) - klien menunggu balasan.
-    for act in ("shutdown", "restart", "sleep", "hibernate", "logoff",
-                "lock", "screenoff", "bogus"):
+    # Hanya aksi yang relatif aman diuji langsung: shutdown/restart/sleep/
+    # hibernate/logoff TIDAK dijalankan di mesin nyata karena polkit
+    # mengizinkannya pada sesi desktop aktif - laptop bisa ikut mati/tidur.
+    for act in ("lock", "screenoff", "bogus"):
         r = system_ctl.power_action(act)
         if not (isinstance(r, tuple) and len(r) == 2
                 and isinstance(r[0], bool) and isinstance(r[1], str)):
@@ -239,7 +241,9 @@ async def ws_tests():
         br = json.loads(await asyncio.wait_for(ws.recv(), 30))
         check("bright_result dibalas", br["t"] == "bright_result" and "msg" in br)
 
-        for act in ("sleep", "hibernate", "logoff", "lock", "screenoff"):
+        # Hanya aksi aman yang dikirim lewat wire: sleep/hibernate/logoff
+        # sungguhan dieksekusi polkit di sesi desktop aktif.
+        for act in ("lock", "screenoff"):
             await ws.send(json.dumps({"t": "power", "a": act}))
             pr = json.loads(await asyncio.wait_for(ws.recv(), 30))
             if not (pr["t"] == "power_result" and pr["a"] == act):
