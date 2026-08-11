@@ -1,0 +1,5 @@
+<resources>
+    <dimen name="glass_radius">22dp</dimen>
+    <dimen name="pill_radius">28dp</dimen>
+    <dimen name="gap">8dp</dimen>
+</resources>

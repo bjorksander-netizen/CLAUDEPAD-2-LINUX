@@ -1,0 +1,13 @@
+<resources>
+    <color name="accent">#7C6CFF</color>
+    <color name="text">#FFFFFFFF</color>
+    <color name="text_muted">#B3FFFFFF</color>
+    <color name="glass">#3DFFFFFF</color>
+    <color name="glass_strong">#59FFFFFF</color>
+    <color name="glass_dim">#26FFFFFF</color>
+    <color name="scrim">#66000000</color>
+    <color name="stroke">#40FFFFFF</color>
+    <color name="green">#4ADE80</color>
+    <color name="amber">#FBBF24</color>
+    <color name="red">#FF6B6B</color>
+</resources>
