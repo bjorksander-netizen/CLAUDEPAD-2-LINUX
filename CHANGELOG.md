@@ -1,0 +1,87 @@
+# Changelog
+
+## v3.6 — port Linux (rilis pertama repo ini)
+
+Turunan dari [CLAUDEPAD-2](https://github.com/bjorksander-netizen/CLAUDEPAD-2)
+v3.5. Protokol jaringan **tidak diubah**; yang ditulis ulang adalah lapisan
+sistem di server.
+
+### Server: baru sepenuhnya
+
+- **Backend input berlapis.** `uinput` (python-evdev) sebagai utama karena
+  hanya itu yang bekerja di Wayland maupun X11; turun ke XTEST (python-xlib)
+  lalu xdotool bila `/dev/uinput` tidak bisa diakses. Backend yang terpilih
+  dilaporkan ke HP dan tampil di jendela server, jadi kegagalan izin terlihat
+  jelas alih-alih berwujud "kursor tidak bergerak".
+- **Scroll hi-res.** Memakai `REL_WHEEL_HI_RES` yang satuannya 1/120 notch —
+  persis sama dengan `WHEEL_DELTA` Windows, sehingga angka dari HP dipakai apa
+  adanya. Sisa di bawah satu notch disimpan, bukan dibuang, jadi scroll pelan
+  tidak patah dan tidak pernah berbalik arah.
+- **Volume** lewat `wpctl` → `pactl` → `amixer`. Mute dilakukan di mixer, bukan
+  lewat tombol media, karena tidak semua desktop memasang `XF86AudioMute`.
+- **Kecerahan** lewat `brightnessctl` → `light` → sysfs → `ddcutil`.
+- **Daya** lewat systemd/logind. Sebelum menampilkan tombol, server menanyakan
+  ke logind aksi mana yang benar-benar mungkin (`can-hibernate` dan
+  kawan-kawan) lalu mengirimkannya ke HP.
+- **WiFi / Bluetooth / hotspot** lewat `nmcli`, `rfkill`, dan `bluetoothctl`.
+- **Firewall** `ufw` dan `firewalld`, dibuka lewat `pkexec`. Mesin tanpa
+  firewall aktif dilaporkan sebagai "sudah terbuka" alih-alih "bermasalah".
+- **Gesture per-desktop.** GNOME, KDE, XFCE, dan Cinnamon punya default
+  masing-masing, dan bisa ditimpa lewat `~/.config/claudepad/gestures.json`
+  tanpa build ulang.
+- **Path XDG.** Token dan konfigurasi di `~/.config/claudepad` (mode 0700),
+  bukan lagi di sebelah executable. Token disimpan di keyring desktop bila
+  ada, kalau tidak di berkas mode 0600.
+- **Auto-start** lewat `~/.config/autostart/claudepad.desktop`. Unit systemd
+  `--user` disertakan untuk pemakaian tanpa GUI.
+- **Penyaringan interface virtual** disesuaikan ke Linux: `docker0`, `br-*`,
+  `veth*`, `virbr*`, `tun/tap`, WireGuard, Tailscale, ZeroTier.
+- **`install.sh`** memasang dependensi di virtualenv sendiri (aman terhadap
+  PEP 668), memasang aturan udev untuk `/dev/uinput`, membuat entri menu, dan
+  membuka port firewall.
+
+### Server: perbaikan yang juga berlaku untuk versi Windows
+
+- Balasan yang dijadwalkan saat klien menutup soket tidak lagi memunculkan
+  `Task exception was never retrieved` di log setiap kali HP memutus koneksi.
+- Alamat MAC untuk Wake-on-LAN dibaca dari sysfs interface default, bukan
+  ditebak dari `uuid.getnode()` yang bisa mengarang alamat.
+
+### Aplikasi Android
+
+- Membaca bidang baru `platform`, `desktop`, `session`, dan `caps` dari
+  `auth_ok`. Server yang tidak mengirimnya (termasuk server Windows v3.5)
+  ditangani sebagai "tidak melapor", dan aplikasi berperilaku persis seperti
+  sebelumnya.
+- **⚙ Setting → sistem** menampilkan platform dan desktop PC;
+  **backend input** menampilkan backend yang dipakai, merah bila tidak aktif.
+  Barisnya disembunyikan saat tersambung ke server Windows.
+- Tombol daya yang dilaporkan tidak didukung (mis. hibernasi tanpa swap, atau
+  matikan layar di Wayland) **diredupkan** dan memberi pesan jelas, alih-alih
+  gagal diam-diam.
+- Panduan gesture memakai istilah netral dan menyebutkan berkas
+  `gestures.json`.
+- Versi naik ke 3.6 (versionCode 20).
+
+### Kompatibilitas
+
+- Server Linux menerima APK **v3.6 dan v3.5**, jadi APK CLAUDEPAD-2 yang sudah
+  terpasang tetap bisa dipakai apa adanya — hanya tanpa tampilan info platform
+  dan peredupan tombol.
+- APK v3.6 tetap bisa tersambung ke server Windows v3.5 kalau versi di sisi
+  Windows dinaikkan; tanpa itu server Windows menolak karena mensyaratkan
+  kecocokan persis.
+
+### Uji
+
+- `tests/test_keymaps.py` — memverifikasi setiap nama tombol di protokol
+  benar-benar ada di evdev dan X11, dan tabel ASCII menutup seluruh karakter
+  cetak. Uji ini menangkap satu bug nyata: python-xlib menamai tombol media
+  `XF86_AudioPlay`, bukan `XF86AudioPlay` seperti xdotool.
+- `tests/test_e2e.py` — kripto (vektor RFC 8439), binary protocol, handshake
+  RSA + ChaCha20, pairing token, rate limiting, discovery UDP, health HTTP.
+- `tests/test_input_x11.py` — menggerakkan pointer dan menekan tombol di
+  server X sungguhan (Xvfb), lalu membaca event-nya kembali: arah scroll,
+  pelepasan modifier, akumulasi setengah notch, dan pemetaan tombol.
+- CI menjalankan ketiganya di websockets 12.0, 13.1, dan 15.0.1, plus sekali
+  lagi tanpa dependensi opsional untuk memastikan server tetap hidup.
