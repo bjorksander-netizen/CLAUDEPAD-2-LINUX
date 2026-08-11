@@ -8,6 +8,7 @@ protokol - persis lapisan yang harus cocok dengan APK.
 """
 import asyncio
 import base64
+import inspect
 import json
 import os
 import socket
@@ -23,11 +24,13 @@ import binary_protocol as bp                                   # noqa: E402
 import crypto_box as cb                                        # noqa: E402
 import input_core as core                                      # noqa: E402
 import pc_server as srv                                        # noqa: E402
+import safe_harness                                           # noqa: E402
 import system_ctl                                              # noqa: E402
 import websockets                                              # noqa: E402
 
 URL = "ws://127.0.0.1:8765/ws"
 FAILED = []
+SKIPPED = []
 
 
 def check(label, cond):
@@ -36,6 +39,26 @@ def check(label, cond):
     else:
         print(f"GAGAL - {label}")
         FAILED.append(label)
+
+
+def skip(label):
+    SKIPPED.append(label)
+    print(f"SKIP - {label}")
+
+
+async def recv_until(ws, wanted, timeout=30):
+    """
+    Baca pesan JSON sampai dapat t==wanted. Pesan lain (mis. push "clip"
+    auto dari poller clipboard) diabaikan supaya urutan balasan
+    deterministik.
+    """
+    while True:
+        raw = await asyncio.wait_for(ws.recv(), timeout)
+        if isinstance(raw, (bytes, bytearray)):
+            raw = raw.decode("utf-8", "replace")
+        msg = json.loads(raw)
+        if msg.get("t") == wanted:
+            return msg
 
 
 # ------------------------------------------------------------ 1. Kripto ----
@@ -148,11 +171,12 @@ def test_linux_layer():
           {"input", "volume", "brightness", "power", "radio"} <= set(caps))
     check("scrollinfo dimatikan di linux", core.get_active_scroll_info() is None)
 
-    # Aksi daya wajib SELALU mengembalikan (bool, str) - klien menunggu balasan.
-    # Hanya aksi yang relatif aman diuji langsung: shutdown/restart/sleep/
-    # hibernate/logoff TIDAK dijalankan di mesin nyata karena polkit
-    # mengizinkannya pada sesi desktop aktif - laptop bisa ikut mati/tidur.
-    for act in ("lock", "screenoff", "bogus"):
+    # Aksi daya wajib SELALU mengembalikan (bool, str) - klien menunggu
+    # balasan. Semua aksi (termasuk shutdown/restart/sleep/hibernate/logoff/
+    # lock/screenoff) aman diuji DI SINI karena safe_harness mem-patch
+    # system_ctl.power_action menjadi stub - tidak ada yang dieksekusi nyata.
+    for act in ("lock", "screenoff", "shutdown", "restart", "sleep",
+                "hibernate", "logoff", "bogus"):
         r = system_ctl.power_action(act)
         if not (isinstance(r, tuple) and len(r) == 2
                 and isinstance(r[0], bool) and isinstance(r[1], str)):
@@ -163,8 +187,9 @@ def test_linux_layer():
 
     for dev in ("wifi", "bluetooth", "hotspot", "bogus"):
         r = core.toggle_radio(dev)
-        if not (isinstance(r, tuple) and len(r) == 2):
-            check(f"toggle_radio('{dev}') mengembalikan tuple", False)
+        if not (isinstance(r, tuple) and len(r) == 2
+                and isinstance(r[0], bool) and isinstance(r[1], str)):
+            check(f"toggle_radio('{dev}') mengembalikan (bool, str)", False)
             break
     else:
         check("toggle_radio selalu (bool, str)", True)
@@ -173,6 +198,32 @@ def test_linux_layer():
           isinstance(system_ctl.brightness_step(10), tuple))
     check("firewall_status mengembalikan bool",
           isinstance(core.firewall_status(), bool))
+
+    # v3.7 - jalur clipboard unit (safe_harness men-stub clipboard.write,
+    # jadi deterministik & NOL subprocess). Anti-loop: konten yang ditulis
+    # server sendiri dicatat di ctx["last_server_write"].
+    ctx = {"clipsync": True}
+    ok, msg = core.clip_set("halo", ctx)
+    check("clip_set menulis via stub + catat anti-loop",
+          ok is True and ctx.get("last_server_write") == "halo")
+    ok, msg = core.clip_set("ditolak", {"clipsync": False})
+    check("clip_set ditolak saat clipsync off", ok is False)
+    ok, s, msg = core.clip_get()
+    check("clip_get via stub (ok, str, msg)",
+          ok is True and isinstance(s, str) and isinstance(msg, str))
+
+    # Guard harness: tanpa CLAUDEPAD_ALLOW_REAL, tidak boleh ada SATUPUN
+    # eksekusi nyata; semua panggilan di atas harus tercatat sebagai simulasi.
+    check("safe_harness: tidak ada aksi sistem nyata dieksekusi",
+          safe_harness.REAL_CALLS == [])
+    sim_power = [c for c in safe_harness.SIMULATED
+                 if c[0] == "system_ctl" and c[1] == "power_action"]
+    sim_radio = [c for c in safe_harness.SIMULATED
+                 if c[0] == "input_core" and c[1] == "toggle_radio"]
+    check("safe_harness: power_action disimulasikan lewat harness",
+          len(sim_power) >= 8)
+    check("safe_harness: toggle_radio disimulasikan lewat harness",
+          len(sim_radio) >= 4)
 
 
 # ----------------------------------------------------- 4. WebSocket E2E ----
@@ -192,12 +243,20 @@ async def ws_tests():
         check("versi APK asing ditolak",
               r["t"] == "auth_fail" and r.get("reason") == "version")
 
-    # Kompatibilitas mundur: APK v3.5 dari repo CLAUDEPAD-2 harus tetap masuk.
+    # Kebijakan v3.7: HANYA APK 3.7 yang diterima (protokol bebas berubah,
+    # tidak ada kewajiban kompatibilitas dengan versi Windows/versi lama).
     core.reset_failed_attempts("127.0.0.1")
     async with websockets.connect(URL) as ws:
         await ws.send(json.dumps({"t": "auth", "pin": core.PIN, "ver": "3.5"}))
-        check("APK v3.5 lama tetap diterima",
-              json.loads(await ws.recv())["t"] == "auth_ok")
+        r = json.loads(await ws.recv())
+        check("APK v3.5 lama ditolak (kebijakan v3.7)",
+              r["t"] == "auth_fail" and r.get("reason") == "version")
+    core.reset_failed_attempts("127.0.0.1")
+    async with websockets.connect(URL) as ws:
+        await ws.send(json.dumps({"t": "auth", "pin": core.PIN, "ver": "3.6"}))
+        r = json.loads(await ws.recv())
+        check("APK v3.6 ditolak (kebijakan v3.7)",
+              r["t"] == "auth_fail" and r.get("reason") == "version")
 
     async with websockets.connect(URL) as ws:
         await ws.send(json.dumps({"t": "auth", "pin": core.PIN,
@@ -227,30 +286,114 @@ async def ws_tests():
         check("pesan kontrol & JSON rusak ditangani", True)
 
         # Klien tidak boleh menggantung: setiap perintah sistem WAJIB dibalas,
-        # walau perangkatnya tidak ada di mesin ini.
+        # walau perangkatnya tidak ada di mesin ini. Server berjalan dengan
+        # safe_harness aktif, jadi toggle_radio adalah STUB (simulasi) -
+        # radio wifi/bluetooth/hotspot TIDAK disentuh sungguhan.
+        # recv_until dipakai supaya push "clip" auto dari poller clipboard
+        # (stub read -> "") tidak mengganggu urutan balasan.
         for dev in ("wifi", "bluetooth", "hotspot"):
             await ws.send(json.dumps({"t": "radio", "d": dev}))
-            rr = json.loads(await asyncio.wait_for(ws.recv(), 60))
-            if not (rr["t"] == "radio_result" and rr["d"] == dev and "msg" in rr):
+            rr = await recv_until(ws, "radio_result")
+            if not (rr["t"] == "radio_result" and rr["d"] == dev and "msg" in rr
+                    and isinstance(rr["ok"], bool)):
                 check(f"radio_result untuk {dev}", False)
                 break
         else:
             check("radio_result selalu dibalas", True)
 
         await ws.send(json.dumps({"t": "bright", "d": 10}))
-        br = json.loads(await asyncio.wait_for(ws.recv(), 30))
+        br = await recv_until(ws, "bright_result")
         check("bright_result dibalas", br["t"] == "bright_result" and "msg" in br)
 
-        # Hanya aksi aman yang dikirim lewat wire: sleep/hibernate/logoff
-        # sungguhan dieksekusi polkit di sesi desktop aktif.
-        for act in ("lock", "screenoff"):
+        # Aksi daya dikirim lewat wire untuk menguji dispatch & format
+        # balasan. safe_harness memastikan SEMUA aksi disimulasikan, bukan
+        # dieksekusi - dulu lock/screenoff mengunci layar sungguhan.
+        for act in ("lock", "screenoff", "shutdown", "restart", "sleep",
+                    "hibernate", "logoff"):
             await ws.send(json.dumps({"t": "power", "a": act}))
-            pr = json.loads(await asyncio.wait_for(ws.recv(), 30))
-            if not (pr["t"] == "power_result" and pr["a"] == act):
+            pr = await recv_until(ws, "power_result")
+            if not (pr["t"] == "power_result" and pr["a"] == act
+                    and isinstance(pr["ok"], bool)):
                 check(f"power_result untuk {act}", False)
                 break
         else:
             check("power_result selalu dibalas", True)
+
+    # ---- v3.7: clipboard & MPRIS lewat wire (safe_harness men-stub) ----
+    core.reset_failed_attempts("127.0.0.1")
+    async with websockets.connect(URL) as ws:
+        await ws.send(json.dumps({"t": "auth", "pin": core.PIN,
+                                  "ver": "3.7"}))
+        a = json.loads(await ws.recv())
+        check("auth v3.7 diterima", a["t"] == "auth_ok")
+        caps = a.get("caps", {})
+        check("caps v3.7 membawa clipboard & nowplaying",
+              isinstance(caps.get("clipboard"), bool)
+              and isinstance(caps.get("nowplaying"), bool))
+
+        # clipsync on (default juga on) -> clipsync_result ok.
+        await ws.send(json.dumps({"t": "clipsync", "on": True}))
+        r = await recv_until(ws, "clipsync_result")
+        check("clipsync on -> clipsync_result ok", r.get("ok") is True)
+
+        # clipget -> clip (ok bool, s str, msg str).
+        await ws.send(json.dumps({"t": "clipget"}))
+        r = await recv_until(ws, "clip")
+        check("clipget -> clip dibalas",
+              isinstance(r.get("ok"), bool) and "s" in r and "msg" in r)
+
+        # clipset -> clipset_result.
+        await ws.send(json.dumps({"t": "clipset", "s": "halo dari hp"}))
+        r = await recv_until(ws, "clipset_result")
+        check("clipset -> clipset_result dibalas",
+              isinstance(r.get("ok"), bool) and "msg" in r)
+
+        # npget -> np (semua kunci wajib kontrak).
+        await ws.send(json.dumps({"t": "npget"}))
+        r = await recv_until(ws, "np")
+        required = ("ok", "title", "artist", "album", "playing",
+                    "length_us", "pos_us", "canseek", "msg")
+        check("npget -> np dibalas",
+              all(k in r for k in required) and isinstance(r.get("ok"), bool))
+
+        # npseek -> npseek_result.
+        await ws.send(json.dumps({"t": "npseek", "pos_us": 123456789}))
+        r = await recv_until(ws, "npseek_result")
+        check("npseek -> npseek_result dibalas",
+              isinstance(r.get("ok"), bool) and "msg" in r)
+
+    # Push "clip" auto TIDAK boleh muncul saat clipsync off, dan clipset
+    # wajib ditolak. Poller clipboard tiap ~1 dtk; stub read -> "" sehingga
+    # tanpa sync tidak ada push sama sekali.
+    core.reset_failed_attempts("127.0.0.1")
+    async with websockets.connect(URL) as ws:
+        await ws.send(json.dumps({"t": "auth", "pin": core.PIN,
+                                  "ver": "3.7"}))
+        await asyncio.wait_for(ws.recv(), 5)          # auth_ok
+        # Matikan sinkronisasi; recv_until mengabaikan push clip auto yang
+        # sempat ter-push sebelum clipsync off diterapkan.
+        await ws.send(json.dumps({"t": "clipsync", "on": False}))
+        await recv_until(ws, "clipsync_result")
+        # Drain sisa antrian (scrollinfo, clip auto yang telanjur masuk).
+        try:
+            while True:
+                await asyncio.wait_for(ws.recv(), 0.4)
+        except asyncio.TimeoutError:
+            pass
+        # Sekarang tunggu ~2.5 dtk: dengan clipsync off, TIDAK BOLEH ada
+        # push clip auto dari poller.
+        try:
+            raw = await asyncio.wait_for(ws.recv(), 2.5)
+            msg = json.loads(raw.decode("utf-8", "replace")
+                             if isinstance(raw, (bytes, bytearray)) else raw)
+            check("TIDAK ada push clip auto saat clipsync off",
+                  not (msg.get("t") == "clip" and msg.get("auto")))
+        except asyncio.TimeoutError:
+            check("TIDAK ada push clip auto saat clipsync off", True)
+        # clipset saat off wajib DITOLAK.
+        await ws.send(json.dumps({"t": "clipset", "s": "ditolak"}))
+        r = await recv_until(ws, "clipset_result")
+        check("clipset ditolak saat clipsync off", r.get("ok") is False)
 
     # Pairing token.
     async with websockets.connect(URL) as ws:
@@ -349,6 +492,15 @@ async def ws_tests():
     await asyncio.sleep(0.5)
     check("registry klien dibersihkan", len(core.CLIENTS) == 0)
 
+    # Guard harness juga berlaku untuk jalur WebSocket: seluruh pemrosesan
+    # pesan radio/power/bright di atas dilakukan lewat stub, bukan nyata.
+    check("safe_harness: WebSocket tidak mengeksekusi aksi nyata",
+          safe_harness.REAL_CALLS == [])
+    sim_ws_power = [c for c in safe_harness.SIMULATED
+                    if c[0] == "system_ctl" and c[1] == "power_action"]
+    check("safe_harness: power lewat WebSocket disimulasikan",
+          len(sim_ws_power) >= 7)
+
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.settimeout(3)
     s.sendto(b"DISCOVER_CLAUDEPAD", ("127.0.0.1", 8766))
@@ -367,15 +519,29 @@ async def ws_tests():
 
 
 def main():
+    # WAJIB paling awal: tanpa ini semua pemanggilan power/radio/bright di
+    # bawah adalah aksi sistem NYATA (pernah mengunci layar & memutus WiFi).
+    # Harness mem-patch system_ctl/input_core menjadi stub yang aman.
+    safe_harness.activate()
     print("=== 1. kripto ===");            test_crypto()
     print("=== 2. binary protocol ===");   test_binary()
     print("=== 3. lapisan linux ===");     test_linux_layer()
     print("=== 4. websocket e2e ===");     asyncio.run(ws_tests())
     print()
+    if SKIPPED:
+        print(f"{len(SKIPPED)} SKIP (blocker sementara):")
+        for s in SKIPPED:
+            print(f"  - {s}")
+        print()
     if FAILED:
         print(f"{len(FAILED)} UJI GAGAL:")
         for f in FAILED:
             print(f"  - {f}")
+        sys.exit(1)
+    try:
+        safe_harness.assert_no_real_calls()
+    except AssertionError as e:
+        print(f"GAGAL - {e}")
         sys.exit(1)
     print("SEMUA UJI LULUS")
 
