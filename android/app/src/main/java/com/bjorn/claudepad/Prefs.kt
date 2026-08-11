@@ -109,4 +109,9 @@ object Prefs {
 
     fun pin(ctx: Context): String = sp(ctx).getString("pin", "") ?: ""
     fun setPin(ctx: Context, v: String) = sp(ctx).edit().putString("pin", v).apply()
+
+    /** v3.7: sinkron clipboard otomatis HP ⇄ PC. Default NYALA. */
+    fun clipAuto(ctx: Context) = sp(ctx).getBoolean("clip_auto", true)
+    fun setClipAuto(ctx: Context, v: Boolean) =
+        sp(ctx).edit().putBoolean("clip_auto", v).apply()
 }

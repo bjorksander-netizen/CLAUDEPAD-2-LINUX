@@ -64,6 +64,8 @@ class SettingsActivity : AppCompatActivity() {
         setContentView(R.layout.activity_settings)
         Haptics.init(this)
         Glass.apply(this, findViewById(R.id.rootSettings))
+        // v3.7: siapkan sinkronisasi clipboard (idempoten)
+        ClipboardSync.init(this)
 
         bindConnectionInfo()
         bindToggles()
@@ -166,6 +168,12 @@ class SettingsActivity : AppCompatActivity() {
         toggleRow(R.id.rowAutoReconnect, R.id.tvAutoReconnect,
             { Prefs.autoReconnect(this) },
             { v -> Prefs.setAutoReconnect(this, v); vm.setAutoReconnect(v) })
+
+        // v3.7: sinkron clipboard otomatis — saat berubah & terhubung,
+        // ClipboardSync yang mengirim clipSync(on) ke server.
+        toggleRow(R.id.rowClipAuto, R.id.tvClipAuto,
+            { Prefs.clipAuto(this) },
+            { v -> Prefs.setClipAuto(this, v); ClipboardSync.setEnabled(v) })
 
         findViewById<View>(R.id.rowShowNotif).setOnClickListener {
             Haptics.medium()

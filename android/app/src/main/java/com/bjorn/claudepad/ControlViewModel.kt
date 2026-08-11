@@ -51,6 +51,12 @@ class ControlViewModel(application: Application) : AndroidViewModel(application)
     /** Informasi scroll window aktif. */
     val scrollInfo: StateFlow<ScrollInfo?> = repo.scrollInfo
 
+    /** v3.7: info lagu yang sedang diputar di PC. */
+    val nowPlaying: StateFlow<WsClient.NowPlaying> = repo.nowPlaying
+
+    /** v3.7: status clipboard di PC. */
+    val clipboardContent: StateFlow<WsClient.ClipboardState> = repo.clipboardContent
+
     // ──────────────────────────── Volume state ───────────────────────────
 
     /** Volume terkini. */
@@ -137,6 +143,14 @@ class ControlViewModel(application: Application) : AndroidViewModel(application)
     // ──────────────────────────── Media commands ─────────────────────────
 
     fun media(action: String) = repo.media(action)
+
+    // ──────────────────────────── v3.7: now playing ──────────────────────
+
+    /** Minta info lagu yang sedang diputar di PC. */
+    fun npGet() = repo.npGet()
+
+    /** Lompat ke posisi [posUs] pada pemutar PC. */
+    fun npSeek(posUs: Long) = repo.npSeek(posUs)
 
     fun setVolume(v: Int) {
         val now = System.currentTimeMillis()

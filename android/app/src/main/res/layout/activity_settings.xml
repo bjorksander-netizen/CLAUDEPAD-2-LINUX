@@ -102,6 +102,12 @@
                 <TextView style="@style/RowValue" android:text="›" />
             </LinearLayout>
             <View style="@style/Divider" />
+            <LinearLayout android:id="@+id/rowClipAuto" style="@style/RowItem">
+                <TextView style="@style/RowTitle" android:text="sinkron clipboard otomatis" />
+                <TextView android:id="@+id/tvClipAuto" style="@style/RowToggle"
+                    android:text="aktif" />
+            </LinearLayout>
+            <View style="@style/Divider" />
             <LinearLayout android:id="@+id/rowForgetPair" style="@style/RowItem">
                 <TextView style="@style/RowTitle" android:text="lupakan pemasangan" />
                 <TextView android:id="@+id/tvPairState" style="@style/RowValue"

@@ -24,6 +24,7 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.EditText
 import android.widget.PopupWindow
+import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.viewModels
@@ -31,6 +32,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -51,6 +53,15 @@ class ControlActivity : AppCompatActivity() {
     private lateinit var volumeSlider: VolumeSlider
     private var advancePopup: PopupWindow? = null
     private var presentationMode = false
+
+    // ── v3.7: Now Playing ──
+    private lateinit var nowPlayingCard: View
+    private lateinit var npStatus: TextView
+    private lateinit var npTitle: TextView
+    private lateinit var npArtist: TextView
+    private lateinit var npSeek: SeekBar
+    private var npLengthUs = 0L
+    private var npUserSeeking = false
 
     // ──────────────────────────── Lifecycle ──────────────────────────────
 
@@ -78,6 +89,9 @@ class ControlActivity : AppCompatActivity() {
         trackpad = findViewById(R.id.trackpad)
         volumeSlider = findViewById(R.id.volumeSlider)
 
+        // v3.7: sinkronisasi clipboard HP ⇄ PC
+        ClipboardSync.init(this)
+
         WifiPerf.acquire(this)
 
         setupTrackpad()
@@ -86,6 +100,7 @@ class ControlActivity : AppCompatActivity() {
         setupShortcuts()
         setupVolume()
         setupMedia()
+        setupNowPlaying()
         setupDpad()
         setupTopBar()
         setupPresentationButtons()
@@ -116,6 +131,8 @@ class ControlActivity : AppCompatActivity() {
                                 tvStatus.text = "${info.hostName} · ${info.transport}"
                                 trackpad.deviceName = info.hostName
                                 RemoteService.update(this@ControlActivity)
+                                // v3.7: minta info now playing sekali saat auth_ok
+                                if (info.nowPlayingSupported) vm.npGet()
                             }
                             is WsClient.ConnectionState.Error -> {
                                 tvStatus.text = state.message
@@ -179,6 +196,24 @@ class ControlActivity : AppCompatActivity() {
                 launch {
                     vm.scrollInfo.collect { info ->
                         trackpad.updateScrollIndicator(info)
+                    }
+                }
+
+                // ─── Now Playing (v3.7) ───
+                launch {
+                    vm.nowPlaying.collect { np ->
+                        renderNowPlaying(np)
+                    }
+                }
+
+                // ─── Polling now playing: npget tiap 5 detik ───
+                launch {
+                    while (true) {
+                        if (vm.isConnected &&
+                            vm.connectionInfo.value.nowPlayingSupported) {
+                            vm.npGet()
+                        }
+                        delay(5000)
                     }
                 }
             }
@@ -535,6 +570,63 @@ class ControlActivity : AppCompatActivity() {
         tap(R.id.mPlay, Haptics.Level.MEDIUM) { vm.media("playpause") }
         tap(R.id.mPrev) { vm.media("prev") }
         tap(R.id.mNext) { vm.media("next") }
+    }
+
+    // ──────────────────────────── Now Playing (v3.7) ─────────────────────
+
+    /**
+     * Kartu kecil info lagu. Kontrolnya tetap mPlay/mPrev/mNext yang sudah
+     * ada — kartu ini hanya menampilkan judul/artis + indikator play/pause,
+     * plus seek bar bila pemutar mendukung seek.
+     */
+    private fun setupNowPlaying() {
+        nowPlayingCard = findViewById(R.id.nowPlayingCard)
+        npStatus = findViewById(R.id.npStatus)
+        npTitle = findViewById(R.id.npTitle)
+        npArtist = findViewById(R.id.npArtist)
+        npSeek = findViewById(R.id.npSeek)
+
+        npSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {}
+            override fun onStartTrackingTouch(sb: SeekBar?) {
+                npUserSeeking = true
+            }
+            override fun onStopTrackingTouch(sb: SeekBar?) {
+                npUserSeeking = false
+                // Kirim posisi hanya saat user selesai drag — bukan saat
+                // progress diubah secara programatik oleh data np baru.
+                if (npLengthUs > 0) {
+                    val posUs = (sb?.progress ?: 0).toLong() * npLengthUs / 1000L
+                    vm.npSeek(posUs)
+                    Haptics.light()
+                }
+            }
+        })
+    }
+
+    private fun renderNowPlaying(np: WsClient.NowPlaying) {
+        // Sembunyikan kartu bila server tidak mendukung now playing
+        // atau PC sedang tidak memutar apa pun (ok:false).
+        if (!np.ok || !vm.connectionInfo.value.nowPlayingSupported) {
+            nowPlayingCard.visibility = View.GONE
+            return
+        }
+        nowPlayingCard.visibility = View.VISIBLE
+        npTitle.text = np.title.ifEmpty { "—" }
+        npArtist.text = np.artist
+        npStatus.text = if (np.playing) "▶" else "⏸"
+        npLengthUs = np.lengthUs
+
+        if (np.canSeek && np.lengthUs > 0) {
+            npSeek.visibility = View.VISIBLE
+            npSeek.max = 1000
+            if (!npUserSeeking) {
+                val pct = (np.posUs * 1000L / np.lengthUs).toInt().coerceIn(0, 1000)
+                npSeek.progress = pct
+            }
+        } else {
+            npSeek.visibility = View.GONE
+        }
     }
 
     // ──────────────────────────── D-pad ──────────────────────────────────

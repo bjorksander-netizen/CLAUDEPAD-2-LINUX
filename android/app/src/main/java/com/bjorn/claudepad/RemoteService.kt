@@ -66,6 +66,8 @@ class RemoteService : Service() {
     override fun onCreate() {
         super.onCreate()
         createChannel()
+        // v3.7: siapkan sinkronisasi clipboard untuk koneksi dari notifikasi
+        ClipboardSync.init(this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

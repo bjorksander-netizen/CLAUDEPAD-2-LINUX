@@ -71,6 +71,12 @@ class ConnectionRepository private constructor() {
     /** Informasi scroll window aktif (dari server). */
     val scrollInfo: StateFlow<ScrollInfo?> = WsClient.scrollInfo
 
+    /** v3.7: status clipboard di PC. */
+    val clipboardContent: StateFlow<WsClient.ClipboardState> = WsClient.clipboardContent
+
+    /** v3.7: info lagu yang sedang diputar di PC. */
+    val nowPlaying: StateFlow<WsClient.NowPlaying> = WsClient.nowPlaying
+
     // ──────────────────────────── Connection commands ────────────────────
 
     fun connect(host: String, pin: String, appVersion: String, token: String) {
@@ -103,6 +109,14 @@ class ConnectionRepository private constructor() {
     fun media(action: String) = WsClient.media(action)
     fun volSet(v: Int) = WsClient.volSet(v)
     fun volGet() = WsClient.volGet()
+
+    // ──────────────────────────── v3.7: clipboard & now playing ──────────
+
+    fun clipSet(s: String) = WsClient.clipSet(s)
+    fun clipGet() = WsClient.clipGet()
+    fun clipSync(on: Boolean) = WsClient.clipSync(on)
+    fun npGet() = WsClient.npGet()
+    fun npSeek(posUs: Long) = WsClient.npSeek(posUs)
 
     // ──────────────────────────── System commands ────────────────────────
 

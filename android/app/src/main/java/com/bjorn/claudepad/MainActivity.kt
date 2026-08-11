@@ -33,6 +33,8 @@ class MainActivity : AppCompatActivity() {
         Glass.apply(this, findViewById(R.id.rootMain))
         Accent.refresh()
         Accent.applyToKey(findViewById(R.id.btnConnect))
+        // v3.7: siapkan sinkronisasi clipboard (idempoten)
+        ClipboardSync.init(this)
 
         etIp = findViewById(R.id.etIp)
         etPin = findViewById(R.id.etPin)

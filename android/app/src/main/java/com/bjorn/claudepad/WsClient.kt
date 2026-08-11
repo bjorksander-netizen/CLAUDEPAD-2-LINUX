@@ -69,7 +69,11 @@ object WsClient {
          */
         val powerActions: Set<String>? = null,
         /** Backend injeksi input di sisi PC: "uinput", "xtest", "none", ... */
-        val inputBackend: String = ""
+        val inputBackend: String = "",
+        /** v3.7: PC melaporkan dukungan sinkron clipboard (caps.clipboard). */
+        val clipboardSupported: Boolean = false,
+        /** v3.7: PC melaporkan dukungan now playing (caps.nowplaying). */
+        val nowPlayingSupported: Boolean = false
     ) {
         /** Label singkat untuk ditampilkan di halaman Setting. */
         fun systemLabel(): String = when {
@@ -87,6 +91,26 @@ object WsClient {
         fun supportsPower(action: String): Boolean =
             powerActions?.contains(action) ?: true
     }
+
+    /** Status clipboard di PC, hasil {"t":"clip"} dari server (v3.7). */
+    data class ClipboardState(
+        val content: String? = null,
+        val ok: Boolean = false,
+        val auto: Boolean = false
+    )
+
+    /** Info lagu yang sedang diputar di PC, hasil {"t":"np"} (v3.7). */
+    data class NowPlaying(
+        val ok: Boolean = false,
+        val title: String = "",
+        val artist: String = "",
+        val album: String = "",
+        val playing: Boolean = false,
+        val lengthUs: Long = 0L,
+        val posUs: Long = 0L,
+        val canSeek: Boolean = false,
+        val msg: String = ""
+    )
 
     // ──────────────────────────── StateFlow API ──────────────────────────
 
@@ -110,6 +134,13 @@ object WsClient {
 
     private val _scrollInfo = MutableStateFlow<ScrollInfo?>(null)
     val scrollInfo: StateFlow<ScrollInfo?> = _scrollInfo.asStateFlow()
+
+    // v3.7: clipboard & now playing dari server
+    private val _clipboardContent = MutableStateFlow(ClipboardState())
+    val clipboardContent: StateFlow<ClipboardState> = _clipboardContent.asStateFlow()
+
+    private val _nowPlaying = MutableStateFlow(NowPlaying())
+    val nowPlaying: StateFlow<NowPlaying> = _nowPlaying.asStateFlow()
 
     // ──────────────────────────── legacy callbacks ───────────────────────
     // Dipertahankan untuk RemoteService (tidak lifecycle-aware).
@@ -168,6 +199,12 @@ object WsClient {
         private set
     @Volatile var volume: Int = 50
 
+    // v3.7: kemampuan baru dari caps.auth_ok
+    @Volatile var clipboardSupported = false
+        private set
+    @Volatile var nowPlayingSupported = false
+        private set
+
     // Raw ping value — hanya untuk kompatibilitas RemoteService.
     // ViewModel harus pakai StateFlow `pingMs`.
     @Volatile private var _pingMsRaw: Int = -1
@@ -210,6 +247,10 @@ object WsClient {
         session = ""
         inputBackend = ""
         powerActions = null
+        clipboardSupported = false
+        nowPlayingSupported = false
+        _clipboardContent.value = ClipboardState()
+        _nowPlaying.value = NowPlaying()
         _connectionInfo.value = ConnectionInfo()
         _reconnectingTo.value = null
         _connectionState.value = ConnectionState.Disconnected
@@ -270,6 +311,24 @@ object WsClient {
     fun power(action: String) = send(JSONObject().put("t", "power").put("a", action))
     fun volSet(v: Int) = send(JSONObject().put("t", "volset").put("v", v))
     fun volGet() = send("volget")
+
+    // ──────────────────────────── v3.7: clipboard & now playing ──────────
+
+    /** Kirim teks clipboard HP ke PC. */
+    fun clipSet(s: String) = send(JSONObject().put("t", "clipset").put("s", s))
+
+    /** Minta isi clipboard PC (server akan balas {"t":"clip",...}). */
+    fun clipGet() = send("clipget")
+
+    /** Aktif/nonaktifkan sinkronisasi clipboard di sisi server. */
+    fun clipSync(on: Boolean) = send(JSONObject().put("t", "clipsync").put("on", on))
+
+    /** Minta info lagu yang sedang diputar di PC. */
+    fun npGet() = send("npget")
+
+    /** Lompat ke posisi [posUs] mikrodetik pada pemutar PC. */
+    fun npSeek(posUs: Long) =
+        send(JSONObject().put("t", "npseek").put("pos_us", posUs))
 
     // ──────────────────────────── WebSocket internals ────────────────────
 
@@ -392,6 +451,10 @@ object WsClient {
                         .filter { it.isNotEmpty() }
                         .toSet()
                 }
+                // v3.7: kemampuan baru — default false supaya APK ini tetap
+                // aman dipakai dengan server lama yang tidak mengirimnya.
+                clipboardSupported = caps?.optBoolean("clipboard", false) ?: false
+                nowPlayingSupported = caps?.optBoolean("nowplaying", false) ?: false
 
                 val fresh = o.optString("token", "")
 
@@ -407,7 +470,9 @@ object WsClient {
                     desktop = desktop,
                     session = session,
                     powerActions = powerActions,
-                    inputBackend = inputBackend
+                    inputBackend = inputBackend,
+                    clipboardSupported = clipboardSupported,
+                    nowPlayingSupported = nowPlayingSupported
                 )
                 _connectionState.value = ConnectionState.Connected
                 _reconnectingTo.value = null
@@ -465,6 +530,37 @@ object WsClient {
                 } else {
                     _scrollInfo.value = null  // sembunyikan indikator
                 }
+            }
+            // ── v3.7: clipboard & now playing ──
+            "clip" -> {
+                val hasS = o.has("s") && !o.isNull("s")
+                val s = if (hasS) o.optString("s") else null
+                // Push otomatis dari server {"t":"clip","s":...,"auto":true}
+                // tidak menyertakan "ok" — kehadiran "s" yang valid cukup
+                // untuk menganggap pesan ini sah.
+                val ok = if (o.has("ok")) o.optBoolean("ok", false) else !s.isNullOrEmpty()
+                val auto = o.optBoolean("auto", false)
+                _clipboardContent.value = ClipboardState(content = s, ok = ok, auto = auto)
+                // Diteruskan supaya ClipboardSync bisa menulis ke clipboard HP.
+                _serverMessages.tryEmit(o)
+                onMessage?.invoke(o)
+            }
+            "np" -> {
+                _nowPlaying.value = NowPlaying(
+                    ok = o.optBoolean("ok", false),
+                    title = o.optString("title", ""),
+                    artist = o.optString("artist", ""),
+                    album = o.optString("album", ""),
+                    playing = o.optBoolean("playing", false),
+                    lengthUs = o.optLong("length_us", 0L),
+                    posUs = o.optLong("pos_us", 0L),
+                    canSeek = o.optBoolean("canseek", false),
+                    msg = o.optString("msg", "")
+                )
+            }
+            "clipset_result", "clipsync_result", "npseek_result" -> {
+                _serverMessages.tryEmit(o)
+                onMessage?.invoke(o)
             }
             else -> {
                 _serverMessages.tryEmit(o)
