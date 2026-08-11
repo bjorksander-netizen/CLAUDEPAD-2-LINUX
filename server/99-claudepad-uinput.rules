@@ -1,0 +1,10 @@
+# Izinkan anggota grup "input" menulis ke /dev/uinput.
+#
+# Tanpa ini, hanya root yang boleh membuat perangkat virtual, dan CLAUDEPAD
+# terpaksa turun ke backend XTEST yang tidak bekerja di Wayland.
+#
+# Pasang dengan server/install.sh, atau manual:
+#   sudo cp 99-claudepad-uinput.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload-rules && sudo udevadm trigger
+#   sudo usermod -aG input "$USER"     # lalu logout & login lagi
+KERNEL=="uinput", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"

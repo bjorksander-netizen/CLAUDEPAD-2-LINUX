@@ -1,0 +1,18 @@
+[Unit]
+Description=CLAUDEPAD remote server (mode konsol)
+Documentation=https://github.com/bjorksander-netizen/CLAUDEPAD-2-LINUX
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+# %h = home direktori pengguna. Sesuaikan kalau repo ditaruh di tempat lain.
+ExecStart=%h/CLAUDEPAD-2-LINUX/server/start_server.sh --nogui
+Restart=on-failure
+RestartSec=5
+# Aksi daya dan backend XTEST butuh variabel sesi grafis; systemd --user
+# tidak mewarisinya sendiri, jadi diimpor dari sesi saat login.
+PassEnvironment=DISPLAY WAYLAND_DISPLAY XDG_SESSION_TYPE XDG_CURRENT_DESKTOP XDG_SESSION_ID XDG_RUNTIME_DIR
+
+[Install]
+WantedBy=graphical-session.target
