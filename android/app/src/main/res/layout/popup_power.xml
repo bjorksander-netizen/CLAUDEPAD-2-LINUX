@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="230dp"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/glass_popup"
+    android:padding="12dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="daya pc"
+        android:textColor="@color/text_muted"
+        android:textSize="11sp"
+        android:letterSpacing="0.1"
+        android:paddingStart="4dp"
+        android:paddingBottom="8dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+        <TextView android:id="@+id/pShutdown" style="@style/KeyGlass"
+            android:layout_width="0dp" android:layout_weight="1"
+            android:layout_height="58dp" android:text="matikan" android:textSize="13sp" />
+        <TextView android:id="@+id/pRestart" style="@style/KeyGlass"
+            android:layout_width="0dp" android:layout_weight="1"
+            android:layout_height="58dp" android:layout_marginStart="8dp"
+            android:text="restart" android:textSize="13sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="8dp">
+        <TextView android:id="@+id/pSleep" style="@style/KeyGlass"
+            android:layout_width="0dp" android:layout_weight="1"
+            android:layout_height="58dp" android:text="tidur" android:textSize="13sp" />
+        <TextView android:id="@+id/pHibernate" style="@style/KeyGlass"
+            android:layout_width="0dp" android:layout_weight="1"
+            android:layout_height="58dp" android:layout_marginStart="8dp"
+            android:text="hibernasi" android:textSize="13sp" />
+    </LinearLayout>
+
+    <TextView android:id="@+id/pLogoff" style="@style/KeyGlass"
+        android:layout_width="match_parent" android:layout_height="58dp"
+        android:layout_marginTop="8dp" android:text="keluar sesi" android:textSize="13sp" />
+</LinearLayout>

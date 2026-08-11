@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <EditText
+        android:id="@+id/etLabel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="label tombol (mis. Save)"
+        android:maxLength="8"
+        android:inputType="text"
+        android:importantForAutofill="no" />
+
+    <EditText
+        android:id="@+id/etKey"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:hint="tombol utama (mis. s, f4, enter, delete)"
+        android:maxLength="12"
+        android:inputType="text"
+        android:importantForAutofill="no" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:text="modifier:"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+        <CheckBox android:id="@+id/cbCtrl" android:layout_width="0dp"
+            android:layout_weight="1" android:layout_height="wrap_content" android:text="Ctrl" />
+        <CheckBox android:id="@+id/cbShift" android:layout_width="0dp"
+            android:layout_weight="1" android:layout_height="wrap_content" android:text="Shift" />
+    </LinearLayout>
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+        <CheckBox android:id="@+id/cbAlt" android:layout_width="0dp"
+            android:layout_weight="1" android:layout_height="wrap_content" android:text="Alt" />
+        <CheckBox android:id="@+id/cbWin" android:layout_width="0dp"
+            android:layout_weight="1" android:layout_height="wrap_content" android:text="Win" />
+    </LinearLayout>
+</LinearLayout>

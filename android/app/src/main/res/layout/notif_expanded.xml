@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingHorizontal="12dp"
+    android:paddingVertical="10dp">
+
+    <!-- baris info -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <TextView
+            android:id="@+id/nHost"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:textColor="?android:attr/textColorPrimary"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:text="CLAUDEPAD" />
+        <TextView
+            android:id="@+id/nInfo"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="?android:attr/textColorSecondary"
+            android:textSize="12sp"
+            android:text="" />
+    </LinearLayout>
+
+    <!-- baris tombol -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="8dp"
+        android:gravity="center_vertical">
+        <ImageButton android:id="@+id/nPrev" style="@style/NotifBtnBig" android:src="@drawable/ic_prev" />
+        <ImageButton android:id="@+id/nPlay" style="@style/NotifBtnBig" android:src="@drawable/ic_play" />
+        <ImageButton android:id="@+id/nNext" style="@style/NotifBtnBig" android:src="@drawable/ic_next" />
+        <ImageButton android:id="@+id/nVolDown" style="@style/NotifBtnBig" android:src="@drawable/ic_voldown" />
+        <ImageButton android:id="@+id/nVolUp" style="@style/NotifBtnBig" android:src="@drawable/ic_volup" />
+        <ImageButton android:id="@+id/nDisconnect" style="@style/NotifBtnBig" android:src="@drawable/ic_disconnect" />
+    </LinearLayout>
+</LinearLayout>

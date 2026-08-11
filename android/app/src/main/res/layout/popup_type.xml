@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/typeRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- Kartu ketik selalu berada di tengah layar (horizontal & vertikal),
+         tidak terpengaruh munculnya keyboard bawaan. Pertumbuhan ke atas
+         diatur dari kode dengan mengunci tepi bawah kartu. -->
+    <LinearLayout
+        android:id="@+id/typeCard"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:layout_marginHorizontal="20dp"
+        android:orientation="horizontal"
+        android:gravity="bottom"
+        android:background="@drawable/glass_popup"
+        android:padding="10dp">
+
+        <EditText
+            android:id="@+id/etPopup"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:minHeight="46dp"
+            android:maxLines="8"
+            android:background="@android:color/transparent"
+            android:hint="ketik di sini"
+            android:textColorHint="@color/text_muted"
+            android:textColor="@color/text"
+            android:textSize="16sp"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="10dp"
+            android:gravity="bottom|start"
+            android:inputType="textMultiLine|textCapSentences"
+            android:importantForAutofill="no" />
+
+        <TextView
+            android:id="@+id/btnPopupEnter"
+            style="@style/KeyGlassAccent"
+            android:layout_width="52dp"
+            android:layout_height="46dp"
+            android:layout_marginStart="8dp"
+            android:text="⏎" />
+    </LinearLayout>
+</FrameLayout>
