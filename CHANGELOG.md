@@ -1,5 +1,49 @@
 # Changelog
 
+## v3.7 — clipboard dua arah, now playing, uninstall
+
+Keputusan proyek: **lepas kompatibilitas dengan server Windows**. Protokol
+kini bebas berkembang, dan server hanya menerima APK dengan versi **3.7**
+yang sama (`COMPATIBLE_APP_VERSIONS = {"3.7"}`).
+
+### Fitur baru
+
+- **Clipboard dua arah (otomatis).** Saat teks disalin di PC, server
+  mendeteksinya (polling ~1 detik lewat `wl-paste`/`xclip`) dan mengirimnya ke
+  HP; sebaliknya, teks yang disalin di HP otomatis masuk ke clipboard PC.
+  Dilengkapi **anti-loop** di kedua sisi (konten yang baru saja ditulis sendiri
+  tidak dipantulkan kembali), **toggle privasi** di ⚙ Setting (default nyala,
+  hanya aktif saat terhubung), dan perintah manual `clipget`/`clipset` tetap
+  tersedia. Tombol lama Ctrl+C/Ctrl+V di popup tetap dipertahankan.
+- **Now playing (MPRIS).** Kartu lagu di halaman kontrol menampilkan judul,
+  artis, dan status play/pause dari pemutar yang sedang aktif di PC (dibaca
+  lewat `gdbus`/`playerctl`, prefer pemutar yang sedang Playing). Kontrol
+  play/pause/next/prev memakai tombol media yang sudah ada; **seek bar**
+  muncul bila pemutar mendukung (`CanSeek`) dan menggesernya melompatkan
+  pemutaran (`SetPosition`/`Seek`).
+- **Uninstall server.** `server/uninstall.sh` menghapus virtualenv, aturan
+  udev, entri menu, autostart, dan unit systemd. Idempoten dan mencetak tiap
+  langkah; config (`~/.config/claudepad`) hanya dihapus dengan konfirmasi
+  atau `--keep-config`.
+
+### Keamanan pengujian (penting)
+
+- Test **tidak boleh lagi mengeksekusi aksi sistem nyata** di mesin
+  pengembang: fondasi `server/tests/safe_harness.py` memaksa semua aksi
+  berdampak-nyata (daya, radio, kecerahan, volume, firewall, input, clipboard,
+  MPRIS) menjadi simulasi; eksekusi nyata hanya lewat env
+  `CLAUDEPAD_ALLOW_REAL=1` di lingkungan terisolasi.
+- **Mode `--sandbox`** di server (atau `CLAUDEPAD_SANDBOX=1`) mensimulasikan
+  semua aksi sistem sehingga jalur penuh bisa diuji tanpa efek samping.
+- `tests/test_safety.py` menjadi **gerbang wajib** di CI sebelum test lain.
+
+### Perubahan lain
+
+- Backend clipboard: `wl-copy`/`wl-paste` (Wayland) → `xclip`/`xsel` (X11).
+  Now playing: `gdbus` → fallback `playerctl`. Tanpa tool, tombol/indikator
+  diredupkan lewat `caps.clipboard` dan `caps.nowplaying`.
+- APK naik ke versionCode 21 (versionName 3.7).
+
 ## v3.6 — port Linux (rilis pertama repo ini)
 
 Turunan dari [CLAUDEPAD-2](https://github.com/bjorksander-netizen/CLAUDEPAD-2)
