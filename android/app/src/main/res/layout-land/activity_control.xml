@@ -1,0 +1,344 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/rootControl"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/bg_scrim"
+    android:fitsSystemWindows="true"
+    android:padding="8dp">
+
+    <!-- ============ Bar kontrol: membentang PENUH di atas ============ -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="4dp"
+        android:paddingBottom="6dp">
+
+        <TextView
+            android:id="@+id/tvStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text"
+            android:textSize="12sp"
+            android:text="..." />
+
+        <TextView
+            android:id="@+id/tvPing"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:textSize="11sp"
+            android:textColor="@color/text_muted"
+            android:visibility="gone"
+            android:text="" />
+
+        <View android:layout_width="0dp" android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <TextView
+            android:id="@+id/btnRotate"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:background="@drawable/glass_round"
+            android:gravity="center"
+            android:text="⤢"
+            android:textColor="@color/text"
+            android:textSize="16sp" />
+
+        <TextView
+            android:id="@+id/btnPresentation"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/glass_round"
+            android:gravity="center"
+            android:text="⬡"
+            android:textColor="@color/text"
+            android:textSize="16sp"
+            android:contentDescription="Mode presentasi" />
+
+        <TextView
+            android:id="@+id/btnDisconnect"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/glass_round"
+            android:gravity="center"
+            android:text="⏻"
+            android:textColor="@color/red"
+            android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/btnSettings"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/glass_round"
+            android:gravity="center"
+            android:text="⚙"
+            android:textColor="@color/text"
+            android:textSize="16sp" />
+    </LinearLayout>
+
+    <!-- ============ Isi: trackpad kiri, tombol kanan ============ -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal"
+        android:baselineAligned="false">
+
+        <com.bjorn.claudepad.TrackpadView
+            android:id="@+id/trackpad"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="match_parent" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:layout_marginStart="8dp">
+
+            <LinearLayout
+                android:id="@+id/normalControls"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical">
+
+                <!-- tombol mouse -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:orientation="horizontal">
+                    <TextView android:id="@+id/btnLeft" style="@style/KeyGlass"
+                        android:layout_width="0dp" android:layout_weight="2"
+                        android:layout_height="match_parent" android:text="◐" />
+                    <TextView android:id="@+id/btnMiddle" style="@style/KeyGlass"
+                        android:layout_width="0dp" android:layout_weight="1"
+                        android:layout_height="match_parent"
+                        android:layout_marginStart="5dp" android:text="⊙" />
+                    <TextView android:id="@+id/btnRight" style="@style/KeyGlass"
+                        android:layout_width="0dp" android:layout_weight="2"
+                        android:layout_height="match_parent"
+                        android:layout_marginStart="5dp" android:text="◑" />
+                </LinearLayout>
+
+                <!-- kolom ketik -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="5dp">
+                    <TextView
+                        android:id="@+id/etType"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/glass_input"
+                        android:gravity="center_vertical"
+                        android:text="ketik di sini"
+                        android:textColor="@color/text_muted"
+                        android:textSize="13sp"
+                        android:paddingHorizontal="12dp"
+                        android:maxLines="1"
+                        android:ellipsize="end"
+                        android:clickable="true"
+                        android:focusable="true" />
+                    <TextView android:id="@+id/kEnter" style="@style/KeyGlassAccent"
+                        android:layout_width="52dp" android:layout_height="match_parent"
+                        android:layout_marginStart="5dp" android:text="⏎" />
+                </LinearLayout>
+
+                <!-- baris pintasan -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="5dp">
+                    <TextView android:id="@+id/btnClipGroup" style="@style/KeyGlass"
+                        android:layout_width="0dp" android:layout_weight="1"
+                        android:layout_height="match_parent" android:text="⧉" />
+                    <TextView android:id="@+id/btnUndoGroup" style="@style/KeyGlass"
+                        android:layout_width="0dp" android:layout_weight="1"
+                        android:layout_height="match_parent"
+                        android:layout_marginStart="5dp" android:text="↩" />
+                    <TextView android:id="@+id/kWinTab" style="@style/KeyGlass"
+                        android:layout_width="0dp" android:layout_weight="1"
+                        android:layout_height="match_parent"
+                        android:layout_marginStart="5dp" android:text="⇌" />
+                    <TextView android:id="@+id/kCloseTab" style="@style/KeyGlass"
+                        android:layout_width="0dp" android:layout_weight="1"
+                        android:layout_height="match_parent"
+                        android:layout_marginStart="5dp" android:text="⊗" />
+                    <TextView android:id="@+id/btnAdvance" style="@style/KeyGlass"
+                        android:layout_width="0dp" android:layout_weight="1"
+                        android:layout_height="match_parent"
+                        android:layout_marginStart="5dp" android:text="⋯" />
+                </LinearLayout>
+
+                <!-- volume + media + dpad -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="3"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="5dp"
+                    android:baselineAligned="false">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="match_parent"
+                        android:orientation="horizontal"
+                        android:background="@drawable/glass_panel"
+                        android:padding="8dp">
+
+                        <com.bjorn.claudepad.VolumeSlider
+                            android:id="@+id/volumeSlider"
+                            android:layout_width="36dp"
+                            android:layout_height="match_parent" />
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_weight="1"
+                            android:layout_height="match_parent"
+                            android:orientation="vertical"
+                            android:layout_marginStart="8dp">
+
+                            <TextView android:id="@+id/mPlay" style="@style/KeyGlassAccent"
+                                android:layout_width="match_parent" android:layout_height="0dp"
+                                android:layout_weight="1" android:text="⏯" android:textSize="18sp" />
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="0dp"
+                                android:layout_weight="1"
+                                android:orientation="horizontal"
+                                android:layout_marginTop="5dp">
+                                <TextView android:id="@+id/mPrev" style="@style/KeyGlass"
+                                    android:layout_width="0dp" android:layout_weight="1"
+                                    android:layout_height="match_parent" android:text="⏮" />
+                                <TextView android:id="@+id/mNext" style="@style/KeyGlass"
+                                    android:layout_width="0dp" android:layout_weight="1"
+                                    android:layout_height="match_parent"
+                                    android:layout_marginStart="5dp" android:text="⏭" />
+                            </LinearLayout>
+
+                            <TextView android:id="@+id/btnConnGroup" style="@style/KeyGlass"
+                                android:layout_width="match_parent" android:layout_height="0dp"
+                                android:layout_weight="1" android:layout_marginTop="5dp"
+                                android:text="SIGNAL" android:textSize="12sp"
+                                android:letterSpacing="0.08" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <FrameLayout
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="match_parent"
+                        android:layout_marginStart="6dp"
+                        android:background="@drawable/glass_panel"
+                        android:padding="8dp">
+                        <com.bjorn.claudepad.DpadView
+                            android:id="@+id/dpad"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:layout_gravity="center" />
+                    </FrameLayout>
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/presentationControls"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:visibility="gone"
+                android:background="@drawable/glass_panel"
+                android:padding="8dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/presLeft"
+                        style="@style/KeyGlass"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="match_parent"
+                        android:text="←"
+                        android:textSize="22sp" />
+
+                    <TextView
+                        android:id="@+id/presRight"
+                        style="@style/KeyGlass"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="match_parent"
+                        android:layout_marginStart="5dp"
+                        android:text="→"
+                        android:textSize="22sp" />
+
+                    <TextView
+                        android:id="@+id/presWinP"
+                        style="@style/KeyGlass"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="match_parent"
+                        android:layout_marginStart="5dp"
+                        android:text="⬡"
+                        android:textSize="22sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="5dp">
+
+                    <TextView
+                        android:id="@+id/presEsc"
+                        style="@style/KeyGlass"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="match_parent"
+                        android:text="Esc"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/presF11"
+                        style="@style/KeyGlass"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="match_parent"
+                        android:layout_marginStart="5dp"
+                        android:text="F11"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/presExit"
+                        style="@style/KeyGlass"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="match_parent"
+                        android:layout_marginStart="5dp"
+                        android:text="✕"
+                        android:textSize="22sp"
+                        android:textColor="@color/red" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>
