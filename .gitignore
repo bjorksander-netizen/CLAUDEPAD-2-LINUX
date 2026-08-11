@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+paired.txt
+gestures.json
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/app/src/main/res/font/*.ttf
+*.apk
+*.aab
+.idea/
