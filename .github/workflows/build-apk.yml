@@ -1,0 +1,184 @@
+name: Build APK & verifikasi server Linux
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "android/**"
+      - "server/**"
+      - ".github/workflows/build-apk.yml"
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # ============================================================
+  # Verifikasi server sebelum APK dibangun. Runner-nya Ubuntu,
+  # jadi ini bukan simulasi: kode yang diuji adalah kode yang
+  # nanti benar-benar jalan di PC pengguna.
+  # ============================================================
+  verify-server:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # API process_request berbeda antara websockets <14 dan >=14.
+        # Server harus jalan di keduanya — diuji nyata, bukan diasumsikan.
+        websockets: ["12.0", "13.1", "15.0.1"]
+    name: verify-server (websockets ${{ matrix.websockets }})
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Pasang dependensi sistem
+        run: |
+          sudo apt-get update
+          # Xvfb: server X sungguhan untuk menguji backend input.
+          # xdotool: backend cadangan terakhir, ikut diuji keberadaannya.
+          sudo apt-get install -y --no-install-recommends xvfb xdotool
+
+      - name: Pasang dependensi Python
+        run: |
+          pip install "websockets==${{ matrix.websockets }}" cryptography \
+                      evdev python-xlib
+
+      - name: Uji peta tombol
+        working-directory: server
+        run: python tests/test_keymaps.py
+
+      - name: Uji protokol end-to-end
+        working-directory: server
+        run: python tests/test_e2e.py
+
+      - name: Uji backend input di X11 sungguhan
+        working-directory: server
+        run: python tests/test_input_x11.py
+
+      - name: Uji server jalan tanpa dependensi opsional
+        working-directory: server
+        run: |
+          # evdev, xlib, keyring, pystray semuanya opsional. Server WAJIB
+          # tetap hidup tanpa mereka — hanya turun ke backend seadanya.
+          pip uninstall -y evdev python-xlib
+          python tests/test_e2e.py
+
+  # ============================================================
+  # Bangun APK. Versinya wajib cocok dengan server, kalau tidak
+  # server menolak koneksi dan pengguna baru sadar di HP.
+  # ============================================================
+  build-apk:
+    needs: verify-server
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: "8.4"
+
+      - name: Baca versi & pastikan APK diterima server
+        id: ver
+        run: |
+          APK=$(grep -oP 'versionName\s*=\s*"\K[^"]+' android/app/build.gradle.kts)
+          SRV=$(grep -oP 'APP_VERSION\s*=\s*"\K[^"]+' server/pc_server.py)
+          COMPAT=$(grep -oP 'COMPATIBLE_APP_VERSIONS\s*=\s*\{\K[^}]+' server/pc_server.py)
+          echo "versi APK        : $APK"
+          echo "versi server     : $SRV"
+          echo "versi diterima   : $COMPAT"
+          if [ "$APK" != "$SRV" ]; then
+            echo "::error::Versi APK ($APK) tidak sama dengan server ($SRV) - naikkan keduanya"
+            exit 1
+          fi
+          if ! echo "$COMPAT" | grep -q "\"$APK\""; then
+            echo "::error::Versi APK ($APK) tidak ada di COMPATIBLE_APP_VERSIONS"
+            exit 1
+          fi
+          echo "version=$APK" >> "$GITHUB_OUTPUT"
+
+      - name: Unduh JetBrains Mono
+        continue-on-error: true
+        run: |
+          mkdir -p android/app/src/main/res/font
+          curl -fsSL --retry 3 -o android/app/src/main/res/font/jetbrains_mono.ttf \
+            "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/v2.304/fonts/ttf/JetBrainsMono-Regular.ttf" \
+            && echo "Font berhasil diunduh" \
+            || echo "Font gagal diunduh - aplikasi akan memakai monospace bawaan"
+
+      - name: Build debug APK
+        working-directory: android
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      - name: Siapkan artefak
+        run: |
+          V="${{ steps.ver.outputs.version }}"
+          cp android/app/build/outputs/apk/debug/app-debug.apk \
+             "CLAUDEPAD-LINUX-v$V.apk"
+          # Server dibungkus tar supaya pengguna bisa mengunduh satu berkas
+          # lalu langsung menjalankan install.sh.
+          tar -czf "CLAUDEPAD-LINUX-server-v$V.tar.gz" server
+          ls -lh CLAUDEPAD-LINUX-*
+
+      - name: Upload artefak
+        uses: actions/upload-artifact@v4
+        with:
+          name: CLAUDEPAD-LINUX-v${{ steps.ver.outputs.version }}
+          path: |
+            CLAUDEPAD-LINUX-v*.apk
+            CLAUDEPAD-LINUX-server-v*.tar.gz
+
+      - name: Publikasi release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          V: ${{ steps.ver.outputs.version }}
+        run: |
+          # API release GitHub sesekali balas "No server is currently
+          # available". Itu gangguan sementara di sisi mereka, bukan
+          # kegagalan build - jadi dicoba ulang dengan jeda menaik.
+          NOTES=$(printf 'Build otomatis dari commit %s.\n\nIsi:\n- CLAUDEPAD-LINUX-v%s.apk — aplikasi Android\n- CLAUDEPAD-LINUX-server-v%s.tar.gz — server untuk PC Linux\n\nLihat CHANGELOG.md untuk daftar perubahan.' "$GITHUB_SHA" "$V" "$V")
+
+          for i in 1 2 3 4 5; do
+            echo "--- percobaan publikasi $i ---"
+            if gh release view latest >/dev/null 2>&1; then
+              # Buang aset lama supaya hanya ada satu versi terbaru dan
+              # pengguna tidak salah unduh.
+              for OLD in $(gh release view latest --json assets \
+                             --jq '.assets[].name' 2>/dev/null || true); do
+                case "$OLD" in
+                  "CLAUDEPAD-LINUX-v$V.apk"|"CLAUDEPAD-LINUX-server-v$V.tar.gz") ;;
+                  *) gh release delete-asset latest "$OLD" --yes >/dev/null 2>&1 || true ;;
+                esac
+              done
+              if gh release edit latest --title "CLAUDEPAD LINUX v$V" --notes "$NOTES" \
+                 && gh release upload latest \
+                      "CLAUDEPAD-LINUX-v$V.apk" \
+                      "CLAUDEPAD-LINUX-server-v$V.tar.gz" --clobber; then
+                echo "Release v$V berhasil diperbarui"; exit 0
+              fi
+            else
+              if gh release create latest \
+                   "CLAUDEPAD-LINUX-v$V.apk" \
+                   "CLAUDEPAD-LINUX-server-v$V.tar.gz" \
+                   --title "CLAUDEPAD LINUX v$V" --notes "$NOTES"; then
+                echo "Release v$V berhasil dibuat"; exit 0
+              fi
+            fi
+            SLEEP=$((i * 20))
+            echo "gagal - menunggu ${SLEEP}s lalu mencoba lagi"
+            sleep $SLEEP
+          done
+
+          echo "::error::Gagal mempublikasikan release setelah 5 percobaan."
+          echo "APK tetap tersedia sebagai artefak build di halaman run ini."
+          exit 1
