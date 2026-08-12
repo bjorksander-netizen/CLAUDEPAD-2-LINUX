@@ -9,8 +9,8 @@ Port dari [CLAUDEPAD-2](https://github.com/bjorksander-netizen/CLAUDEPAD-2)
 sama bicara dengan server Windows maupun Linux — yang ditulis ulang hanya
 lapisan sistem: injeksi input, volume, daya, radio, dan firewall.
 
-**[⬇ Unduh APK + server terbaru](../../releases/tag/latest)** — dibangun
-otomatis oleh GitHub Actions.
+**[⬇ Unduh APK + server terbaru](../../releases/latest)** — dibangun
+otomatis oleh GitHub Actions (rilis semver `v3.8.0`).
 
 ---
 
@@ -22,15 +22,17 @@ cd CLAUDEPAD-2-LINUX/server
 ./install.sh
 ```
 
-`install.sh` melakukan empat hal, dan mencetak setiap langkah sebelum
-menjalankannya:
+`install.sh` sekarang hanya **wrapper tipis** ke `setup_core.py` (logika
+intinya ada di Python, idempoten & sandbox-aware). Ia melakukan lima hal,
+dan mencetak setiap langkah sebelum menjalankannya:
 
 1. membuat virtualenv sendiri di `~/.local/share/claudepad/venv` lalu memasang
    dependensi Python di sana — Python sistem tidak disentuh;
 2. memasang aturan udev supaya `/dev/uinput` bisa ditulis grup `input`, dan
    memasukkan kamu ke grup itu;
 3. memasang entri menu aplikasi;
-4. membuka port firewall bila `ufw` atau `firewalld` aktif.
+4. mengaktifkan autostart saat login (XDG Autostart);
+5. membuka port firewall bila `ufw` atau `firewalld` aktif.
 
 > **Logout lalu login lagi setelah instalasi pertama.** Keanggotaan grup
 > `input` baru berlaku di sesi baru. Tanpa itu server turun ke backend X11
@@ -43,6 +45,21 @@ Jalankan servernya:
 ./start_server.sh              # dengan GUI
 ./start_server.sh --nogui      # konsol / SSH / systemd
 ```
+
+### Setup Wizard (v3.8)
+
+Bila mau lewat antarmuka, ada wizard grafis. Klik tombol **Setup Wizard** di
+jendela server, atau jalankan dari konsol:
+
+```bash
+python3 pc_server.py --wizard     # wizard GUI (Tkinter)
+./install.sh                      # setara wizard, tapi teks polos
+./uninstall.sh                    # lepas via wizard/teks
+```
+
+Tanpa `tkinter`, `--wizard` otomatis jatuh ke mode CLI (prompt teks). Setiap
+langkah berjalan di thread terpisah supaya jendela tidak freeze, dan langkah
+yang butuh root meminta izin lewat `pkexec`.
 
 > **Mode sandbox** (`--sandbox` atau `CLAUDEPAD_SANDBOX=1`): semua aksi
 > berdampak-nyata (radio, daya, kecerahan, volume, clipboard, seek pemutar)
@@ -192,13 +209,16 @@ Firefox (plugin), dan banyak lagi.
 
 ```bash
 cd CLAUDEPAD-2-LINUX/server
-./uninstall.sh          # hapus semuanya, kecuali konfigurasi (ditanyakan)
+./uninstall.sh                 # hapus semuanya, kecuali konfigurasi
 ./uninstall.sh --keep-config   # hapus program, pertahankan token pairing
+python3 pc_server.py --wizard  # atau lewat wizard GUI → pilih "Lepas"
 ```
 
-`uninstall.sh` idempotent dan mencetak tiap langkah: virtualenv, aturan udev,
-entri menu, autostart, dan unit systemd user. Keanggotaan grup `input` tidak
-dicabut otomatis karena dipakai bersama aplikasi lain.
+`uninstall.sh` sekarang juga **wrapper tipis** ke `setup_core.py`. Ia
+idempotent dan mencetak tiap langkah: virtualenv, aturan udev, entri menu,
+autostart, unit systemd user, dan konfigurasi (`~/.config/claudepad` — kecuali
+`--keep-config`). Keanggotaan grup `input` tidak dicabut otomatis karena
+dipakai bersama aplikasi lain.
 
 ---
 
@@ -312,6 +332,8 @@ aksesibilitas lain, tapi tetap perlu kamu ketahui sebelum memasangnya.
 CLAUDEPAD-2-LINUX/
 ├── server/                    jalan di PC Linux
 │   ├── pc_server.py           GUI desktop + layer WebSocket
+│   ├── setup_core.py          logika install/uninstall (idempoten, sandbox-aware)
+│   ├── wizard.py              wizard setup GUI (Tkinter) + fallback CLI
 │   ├── input_core.py          backend input, volume, gesture, discovery, firewall, clipboard & MPRIS dispatch
 │   ├── clipboard.py           baca/tulis clipboard (wl-copy/wl-paste, xclip/xsel)
 │   ├── mpris.py               now-playing & seek via MPRIS (gdbus, fallback playerctl)
@@ -320,14 +342,14 @@ CLAUDEPAD-2-LINUX/
 │   ├── binary_protocol.py     encoder biner (pasangan BinaryProtocol.kt)
 │   ├── paths.py               path XDG
 │   ├── autostart.py           entri autostart XDG
-│   ├── install.sh             pemasangan sekali jalan
-│   ├── uninstall.sh           penghapusan (kebalikan install.sh)
+│   ├── install.sh             wrapper tipis ke setup_core.py (pasang)
+│   ├── uninstall.sh           wrapper tipis ke setup_core.py (lepas)
 │   ├── start_server.sh        jalankan (bikin virtualenv sendiri)
 │   ├── fix_firewall.sh        buka port lewat pkexec
 │   ├── usb_mode.sh            adb reverse
 │   ├── claudepad.service      unit systemd --user (opsional)
 │   ├── 99-claudepad-uinput.rules   aturan udev
-│   └── tests/                 uji protokol, peta tombol, keamanan, dan input X11
+│   └── tests/                 uji protokol, peta tombol, keamanan, setup, dan input X11
 └── android/                   project Android Studio (Kotlin)
 ```
 
@@ -339,9 +361,15 @@ Semua uji jalan tanpa perangkat keras khusus dan ikut dijalankan di CI:
 cd server
 python3 tests/test_keymaps.py     # peta tombol evdev & X11
 python3 tests/test_safety.py      # jaring pengaman: tidak ada aksi sistem nyata
+python3 tests/test_setup.py       # wizard: install/uninstall simulasi, no-real-subprocess
 python3 tests/test_e2e.py         # kripto, binary protocol, handshake, discovery
 python3 tests/test_input_x11.py   # backend input di X server Xvfb sungguhan
 ```
+
+`test_safety.py` **dijalankan paling awal** di CI: bila ada test yang nekat
+mengeksekusi aksi sistem nyata, CI langsung digagalkan. `test_setup.py`
+membuktikan `setup_core` tidak memanggil subprocess sungguhan saat harness
+aktif, dan `uninstall` aman dijalankan berulang (idempoten).
 
 `test_input_x11.py` benar-benar menggerakkan pointer dan menekan tombol di
 server X, lalu membaca event-nya kembali — jadi arah scroll, pelepasan
