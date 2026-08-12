@@ -323,7 +323,7 @@ async def ws_tests():
     core.reset_failed_attempts("127.0.0.1")
     async with websockets.connect(URL) as ws:
         await ws.send(json.dumps({"t": "auth", "pin": core.PIN,
-                                  "ver": "3.7"}))
+                                  "ver": srv.APP_VERSION}))
         a = json.loads(await ws.recv())
         check("auth v3.7 diterima", a["t"] == "auth_ok")
         caps = a.get("caps", {})
@@ -368,7 +368,7 @@ async def ws_tests():
     core.reset_failed_attempts("127.0.0.1")
     async with websockets.connect(URL) as ws:
         await ws.send(json.dumps({"t": "auth", "pin": core.PIN,
-                                  "ver": "3.7"}))
+                                  "ver": srv.APP_VERSION}))
         await asyncio.wait_for(ws.recv(), 5)          # auth_ok
         # Matikan sinkronisasi; recv_until mengabaikan push clip auto yang
         # sempat ter-push sebelum clipsync off diterapkan.
