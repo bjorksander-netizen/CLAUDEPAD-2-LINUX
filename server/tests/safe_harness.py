@@ -272,6 +272,14 @@ def activate():
     _save_backend_state()
     input_core.BACKEND = input_core._NullBackend()
 
+    # Setup wizard (GAP #3): setup_core memeriksa input_core.is_sandbox()
+    # untuk memutuskan apakah menjalankan aksi nyata (venv, udev, group,
+    # menu, firewall). Saat harness aktif, paksa is_sandbox() -> True supaya
+    # setup_core TIDAK menyentuh sistem di jalur test (hanya mencatat
+    # "[SANDBOX] (simulasi)"). Tanpa ini, install_all() benar-benar
+    # menjalankan subprocess (cp/usermod/pip) di desktop pengembang.
+    _install(input_core, "is_sandbox", lambda: True)
+
     # Isolasi path data (rekomendasi): test TIDAK boleh menulis ke
     # ~/.config/claudepad (token pairing, gestures) pengguna sungguhan.
     _install(paths, "config_dir", _sim_config_dir)

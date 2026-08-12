@@ -49,12 +49,12 @@ from input_core import (CLIENTS, DISCOVERY_PORT, HOSTNAME, LOGQ, PLATFORM,
                         record_failed_attempt, reset_failed_attempts,
                         session_type, volume_get)
 
-APP_VERSION = "3.7"
+APP_VERSION = "3.8"
 
-# Versi APK yang diterima. v3.7 membawa clipboard dua arah & now-playing
-# MPRIS; protokol boleh berubah (tidak ada kewajiban kompatibilitas dengan
-# versi Windows), jadi versi lain ditolak.
-COMPATIBLE_APP_VERSIONS = {"3.7"}
+# Versi APK yang diterima. v3.8 membawa wizard install/uninstall; protokol
+# boleh berubah (tidak ada kewajiban kompatibilitas dengan versi Windows),
+# jadi versi lain ditolak.
+COMPATIBLE_APP_VERSIONS = {"3.8"}
 
 # RSA-2048 keypair: digenerate sekali saat server start.
 _RSA_KEYPAIR = None
@@ -633,6 +633,8 @@ def run_gui(minimized=False):
              accent=True)
     flat_btn(btnbar, "Putuskan", disconnect_clients)
     flat_btn(btnbar, "Perbaiki Firewall", do_fix_firewall)
+    flat_btn(btnbar, "Setup Wizard",
+             lambda: threading.Thread(target=_launch_wizard, daemon=True).start())
 
     tk.Label(root, text="LOG", font=_mono(9), bg=BG, fg=MUTED,
              anchor="w").pack(fill="x", padx=22, pady=(6, 4))
@@ -767,6 +769,15 @@ def run_gui(minimized=False):
     root.mainloop()
 
 
+def _launch_wizard():
+    """Buka wizard setup (GUI bila tkinter ada, selain itu CLI)."""
+    try:
+        import wizard
+        wizard.main()
+    except Exception as e:                                 # noqa: BLE001
+        log(f"[!] Wizard gagal: {e}")
+
+
 def run_console():
     init_backend()
     core.write_default_gestures()
@@ -799,6 +810,9 @@ if __name__ == "__main__":
     parser.add_argument("--nogui", action="store_true", help="Jalankan tanpa GUI")
     parser.add_argument("--minimized", action="store_true",
                         help="Mulai terminimalkan ke area notifikasi")
+    parser.add_argument("--wizard", action="store_true",
+                        help="Buka wizard install/uninstall lalu keluar "
+                             "(tanpa menjalankan server)")
     parser.add_argument("--input-backend", choices=["uinput", "xtest", "xdotool"],
                         help="Paksa backend input tertentu")
     parser.add_argument("--sandbox", action="store_true",
@@ -809,6 +823,11 @@ if __name__ == "__main__":
     # Mode sandbox: flag baris perintah ATAU env CLAUDEPAD_SANDBOX=1.
     if args.sandbox or os.environ.get("CLAUDEPAD_SANDBOX") == "1":
         core.set_sandbox(True)
+
+    # Mode wizard: buka wizard lalu keluar, tanpa menjalankan server.
+    if args.wizard:
+        _launch_wizard()
+        sys.exit(0)
 
     if args.input_backend:
         _forced = args.input_backend

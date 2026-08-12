@@ -1,5 +1,31 @@
 # Changelog
 
+## v3.8 — wizard install & uninstall (PC Linux)
+
+Logika pemasangan/penghapusan diport dari bash (`install.sh`/`uninstall.sh`)
+ke Python murni (`setup_core.py`) dan diberi wizard grafis (`wizard.py`):
+
+### Fitur baru
+
+- **Wizard setup (Tkinter).** Tombol "Setup Wizard" di jendela server, atau
+  `python3 pc_server.py --wizard` dari konsol, membuka panduan multi-step:
+  pasang virtualenv + dependensi, aturan udev & grup input, entri menu,
+  autostart, dan buka port firewall. Tanpa `tkinter`, wizard jatuh ke mode
+  CLI (prompt teks).
+- **Idempoten & sandbox-aware.** `setup_core` aman dijalankan berkali-kali;
+  saat mode `--sandbox` aktif semua aksi sistem hanya disimulasikan.
+- **`install.sh`/`uninstall.sh` jadi wrapper tipis** ke `setup_core.py`
+  (sumber kebenaran sekarang di Python, bukan bash).
+- **Test keamanan setup.** `tests/test_setup.py` membuktikan install/uninstall
+  tidak menjalankan subprocess nyata saat `safe_harness` aktif, dan
+  `safe_harness` kini men-stub `input_core.is_sandbox()` (GAP #3) supaya
+  wizard tidak menyentuh sistem di jalur test.
+
+### Catatan kompatibilitas
+
+- Versi naik ke **3.8**; server hanya menerima APK 3.8
+  (`COMPATIBLE_APP_VERSIONS = {"3.8"}`).
+
 ## v3.7 — clipboard dua arah, now playing, uninstall
 
 Keputusan proyek: **lepas kompatibilitas dengan server Windows**. Protokol
