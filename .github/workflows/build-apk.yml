@@ -23,7 +23,7 @@ jobs:
       matrix:
         # API process_request berbeda antara websockets <14 dan >=14.
         # Server harus jalan di keduanya — diuji nyata, bukan diasumsikan.
-        websockets: ["12.0", "13.1", "15.0.1"]
+        websockets: [ "12.0", "13.1", "15.0.1" ]
     name: verify-server (websockets ${{ matrix.websockets }})
     steps:
       - uses: actions/checkout@v4
@@ -74,8 +74,9 @@ jobs:
           python tests/test_e2e.py
 
   # ============================================================
-  # Bangun APK. Versinya wajib cocok dengan server, kalau tidak
-  # server menolak koneksi dan pengguna baru sadar di HP.
+  # Bangun APK yang DITANDATANGANI, lalu terbitkan sebagai rilis
+  # semver (vX.Y.Z). Versi APK wajib cocok dengan server, kalau
+  # tidak server menolak koneksi dan pengguna baru sadar di HP.
   # ============================================================
   build-apk:
     needs: verify-server
@@ -113,7 +114,13 @@ jobs:
             echo "::error::Versi APK ($APK) tidak ada di COMPATIBLE_APP_VERSIONS"
             exit 1
           fi
-          echo "version=$APK" >> "$GITHUB_OUTPUT"
+          # Normalisasi ke semver (3 bagian) supaya tag rilis rapi & konsisten.
+          IFS='.' read -ra P <<< "$APK"
+          while [ ${#P[@]} -lt 3 ]; do P+=("0"); done
+          SEMVER="${P[0]}.${P[1]}.${P[2]}"
+          echo "version_raw=$APK" >> "$GITHUB_OUTPUT"
+          echo "semver=$SEMVER"     >> "$GITHUB_OUTPUT"
+          echo "tag=v$SEMVER"       >> "$GITHUB_OUTPUT"
 
       - name: Unduh JetBrains Mono
         continue-on-error: true
@@ -124,70 +131,144 @@ jobs:
             && echo "Font berhasil diunduh" \
             || echo "Font gagal diunduh - aplikasi akan memakai monospace bawaan"
 
-      - name: Build debug APK
-        working-directory: android
-        run: gradle assembleDebug --no-daemon --stacktrace
-
-      - name: Siapkan artefak
+      - name: Build APK (release, unsigned)
+        id: build
         run: |
-          V="${{ steps.ver.outputs.version }}"
-          cp android/app/build/outputs/apk/debug/app-debug.apk \
-             "CLAUDEPAD-LINUX-v$V.apk"
-          # Server dibungkus tar supaya pengguna bisa mengunduh satu berkas
-          # lalu langsung menjalankan install.sh.
-          tar -czf "CLAUDEPAD-LINUX-server-v$V.tar.gz" server
-          ls -lh CLAUDEPAD-LINUX-*
+          set +e
+          # Tanpa signingConfig di build.gradle.kts, AGP menghasilkan APK
+          # UNSIGNED (app-release-unsigned.apk). Penandatanganan dilakukan
+          # sepenuhnya oleh langkah berikutnya, sehingga cukup sekali tanda
+          # tangan dan tidak ada risiko double-sign.
+          gradle assembleRelease --no-daemon --stacktrace
+          UNSIGNED=$(find android/app/build/outputs/apk/release -name '*.apk' | head -1)
+          if [ -z "$UNSIGNED" ]; then
+            echo "::error::assembleRelease tidak menghasilkan APK"
+            exit 1
+          fi
+          # Pastikan benar-benar unsigned: apksigner menolak menandatangani APK
+          # yang sudah ditandatangani, jadi ini pengaman.
+          if "$ANDROID_HOME"/build-tools/*/apksigner 2>/dev/null; then :; fi
+          echo "apk_path=$UNSIGNED" >> "$GITHUB_OUTPUT"
 
-      - name: Upload artefak
+      - name: Tanda tangani APK
+        id: sign
+        env:
+          KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.SIGNING_KEY_PASSWORD }}
+          STORE_PASS: ${{ secrets.SIGNING_STORE_PASSWORD }}
+        run: |
+          ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)
+          if [ -z "$APKSIGNER" ]; then
+            echo "::error::apksigner tidak ditemukan di \$ANDROID_HOME/build-tools"
+            exit 1
+          fi
+          APK="${{ steps.build.outputs.apk_path }}"
+
+          if [ -n "$KEYSTORE_B64" ]; then
+            # Keystore produksi dari rahasia repo - APK resmi milikmu.
+            echo "$KEYSTORE_B64" | base64 -d > /tmp/claudepad.jks
+            KS=/tmp/claudepad.jks
+            ALIAS="$KEY_ALIAS"; SP="$STORE_PASS"; KP="$KEY_PASS"
+            echo "Menandatangani dengan keystore produksi (rahasia repo)."
+          else
+            # Tanpa rahasia: pakai debug keystore CI agar APK tetap terpasang.
+            # (Gradle menciptakannya saat build; kalau belum ada, buat sekarang.)
+            KS="$HOME/.android/debug.keystore"
+            if [ ! -f "$KS" ]; then
+              mkdir -p "$HOME/.android"
+              keytool -genkeypair -v -keystore "$KS" -alias androiddebugkey \
+                -keyalg RSA -keysize 2048 -validity 10000 \
+                -storepass android -keypass android \
+                -dname "CN=Android Debug,O=Android,C=US"
+            fi
+            ALIAS=androiddebugkey; SP=android; KP=android
+            echo "Tidak ada rahasia keystore - menandatangani dengan debug keystore CI."
+          fi
+          # APK dari Gradle belum ditandatangani, jadi cukup sekali tanda tangan.
+          "$APKSIGNER" sign --ks "$KS" --ks-key-alias "$ALIAS" \
+            --ks-pass pass:"$SP" --key-pass pass:"$KP" "$APK"
+          echo "apk_signed=$APK" >> "$GITHUB_OUTPUT"
+
+      - name: Siapkan aset rilis
+        id: assets
+        run: |
+          SEM="${{ steps.ver.outputs.semver }}"
+          SIGNED="${{ steps.sign.outputs.apk_signed }}"
+          APK_NAME="CLAUDEPAD-LINUX-v$SEM.apk"
+          cp "$SIGNED" "$APK_NAME"
+          tar -czf "CLAUDEPAD-LINUX-server-v$SEM.tar.gz" server
+          # Checksum untuk verifikasi integritas unduhan oleh pengguna.
+          sha256sum "$APK_NAME" "CLAUDEPAD-LINUX-server-v$SEM.tar.gz" > SHA256SUMS
+          echo "apk_name=$APK_NAME" >> "$GITHUB_OUTPUT"
+          echo "server_name=CLAUDEPAD-LINUX-server-v$SEM.tar.gz" >> "$GITHUB_OUTPUT"
+          ls -lh "$APK_NAME" "CLAUDEPAD-LINUX-server-v$SEM.tar.gz" SHA256SUMS
+
+      - name: Ekstrak catatan rilis dari CHANGELOG
+        id: notes
+        run: |
+          V="${{ steps.ver.outputs.version_raw }}"
+          # Ambil bagian di bawah "## v<V>" sampai heading berikutnya.
+          awk -v v="v$V" '
+            /^## / { if (f) exit; if ($0 ~ "^## " v) f=1; next }
+            f { print }
+          ' CHANGELOG.md > /tmp/notes.md
+          if [ ! -s /tmp/notes.md ]; then
+            printf 'Build otomatis dari commit %s.\n\nLihat CHANGELOG.md untuk daftar perubahan.\n' \
+              "$GITHUB_SHA" > /tmp/notes.md
+          fi
+          echo "notes_file=/tmp/notes.md" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artefak (cadangan bila rilis gagal)
         uses: actions/upload-artifact@v4
         with:
-          name: CLAUDEPAD-LINUX-v${{ steps.ver.outputs.version }}
+          name: CLAUDEPAD-LINUX-v${{ steps.ver.outputs.semver }}
           path: |
             CLAUDEPAD-LINUX-v*.apk
             CLAUDEPAD-LINUX-server-v*.tar.gz
+            SHA256SUMS
 
-      - name: Publikasi release
+      - name: Publikasikan rilis semver
         if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          V: ${{ steps.ver.outputs.version }}
+          TAG: ${{ steps.ver.outputs.tag }}
+          SEM: ${{ steps.ver.outputs.semver }}
         run: |
-          # API release GitHub sesekali balas "No server is currently
-          # available". Itu gangguan sementara di sisi mereka, bukan
-          # kegagalan build - jadi dicoba ulang dengan jeda menaik.
-          NOTES=$(printf 'Build otomatis dari commit %s.\n\nIsi:\n- CLAUDEPAD-LINUX-v%s.apk — aplikasi Android\n- CLAUDEPAD-LINUX-server-v%s.tar.gz — server untuk PC Linux\n\nLihat CHANGELOG.md untuk daftar perubahan.' "$GITHUB_SHA" "$V" "$V")
-
+          APK="CLAUDEPAD-LINUX-v$SEM.apk"
+          SRV="CLAUDEPAD-LINUX-server-v$SEM.tar.gz"
+          NOTES="$(cat /tmp/notes.md)"
+          # API release GitHub sesekali balas "No server is currently available".
+          # Itu gangguan sementara di sisi mereka - coba ulang dengan jeda menaik.
           for i in 1 2 3 4 5; do
             echo "--- percobaan publikasi $i ---"
-            if gh release view latest >/dev/null 2>&1; then
-              # Buang aset lama supaya hanya ada satu versi terbaru dan
-              # pengguna tidak salah unduh.
-              for OLD in $(gh release view latest --json assets \
-                             --jq '.assets[].name' 2>/dev/null || true); do
-                case "$OLD" in
-                  "CLAUDEPAD-LINUX-v$V.apk"|"CLAUDEPAD-LINUX-server-v$V.tar.gz") ;;
-                  *) gh release delete-asset latest "$OLD" --yes >/dev/null 2>&1 || true ;;
-                esac
-              done
-              if gh release edit latest --title "CLAUDEPAD LINUX v$V" --notes "$NOTES" \
-                 && gh release upload latest \
-                      "CLAUDEPAD-LINUX-v$V.apk" \
-                      "CLAUDEPAD-LINUX-server-v$V.tar.gz" --clobber; then
-                echo "Release v$V berhasil diperbarui"; exit 0
+            if gh release view "$TAG" >/dev/null 2>&1; then
+              if gh release edit "$TAG" --title "CLAUDEPAD LINUX v$SEM" --notes "$NOTES" \
+                 && gh release upload "$TAG" "$APK" "$SRV" SHA256SUMS --clobber; then
+                echo "Release $TAG diperbarui"; exit 0
               fi
             else
-              if gh release create latest \
-                   "CLAUDEPAD-LINUX-v$V.apk" \
-                   "CLAUDEPAD-LINUX-server-v$V.tar.gz" \
-                   --title "CLAUDEPAD LINUX v$V" --notes "$NOTES"; then
-                echo "Release v$V berhasil dibuat"; exit 0
+              if gh release create "$TAG" "$APK" "$SRV" SHA256SUMS \
+                   --title "CLAUDEPAD LINUX v$SEM" --notes "$NOTES"; then
+                echo "Release $TAG dibuat"; exit 0
               fi
             fi
             SLEEP=$((i * 20))
             echo "gagal - menunggu ${SLEEP}s lalu mencoba lagi"
             sleep $SLEEP
           done
-
           echo "::error::Gagal mempublikasikan release setelah 5 percobaan."
           echo "APK tetap tersedia sebagai artefak build di halaman run ini."
           exit 1
+
+      - name: Hapus rilis 'latest' usang (migrasi ke semver)
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Repo ini dulu memakai tag 'latest' yang mutable. Setelah rilis
+          # semver aktif, tag itu dihapus agar tidak mengganggu. Aman dijalankan
+          # berulang - perintah di bawah gagal diam-diam bila sudah tiada.
+          gh release delete latest --yes 2>/dev/null || true
+          git push --delete origin latest 2>/dev/null || true

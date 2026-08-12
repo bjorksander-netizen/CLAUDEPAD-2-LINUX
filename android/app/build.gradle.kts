@@ -18,6 +18,10 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            // Sengaja TIDAK ditandatangani di sini. Penandatanganan ditangani
+            // sepenuhnya oleh CI (.github/workflows/build-apk.yml): pakai
+            // keystore produksi bila rahasia disetel, selain itu debug keystore
+            // CI. Ini menghindari "re-sign" yang rapuh pada APK sudah-tertanda.
         }
     }
     compileOptions {
