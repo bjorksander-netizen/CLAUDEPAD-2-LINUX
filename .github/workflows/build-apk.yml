@@ -133,6 +133,7 @@ jobs:
 
       - name: Build APK (release, unsigned)
         id: build
+        working-directory: android
         run: |
           set +e
           # Tanpa signingConfig di build.gradle.kts, AGP menghasilkan APK
@@ -140,15 +141,16 @@ jobs:
           # sepenuhnya oleh langkah berikutnya, sehingga cukup sekali tanda
           # tangan dan tidak ada risiko double-sign.
           gradle assembleRelease --no-daemon --stacktrace
-          UNSIGNED=$(find android/app/build/outputs/apk/release -name '*.apk' | head -1)
-          if [ -z "$UNSIGNED" ]; then
+          set -e
+          # CWD = android/, jadi output ada di app/build/outputs/... di dalamnya.
+          APK_REL=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
+          if [ -z "$APK_REL" ]; then
             echo "::error::assembleRelease tidak menghasilkan APK"
             exit 1
           fi
-          # Pastikan benar-benar unsigned: apksigner menolak menandatangani APK
-          # yang sudah ditandatangani, jadi ini pengaman.
-          if "$ANDROID_HOME"/build-tools/*/apksigner 2>/dev/null; then :; fi
-          echo "apk_path=$UNSIGNED" >> "$GITHUB_OUTPUT"
+          # Tulis sebagai path relatif ke root repo agar langkah berikutnya
+          # (yang berjalan dari root) bisa menggunakannya.
+          echo "apk_path=android/$APK_REL" >> "$GITHUB_OUTPUT"
 
       - name: Tanda tangani APK
         id: sign
