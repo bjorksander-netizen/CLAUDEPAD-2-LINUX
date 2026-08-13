@@ -203,12 +203,12 @@ def test_linux_layer():
     # jadi deterministik & NOL subprocess). Anti-loop: konten yang ditulis
     # server sendiri dicatat di ctx["last_server_write"].
     ctx = {"clipsync": True}
-    ok, msg = core.clip_set("halo", ctx)
+    ok, msg = core.clip_set("halo", ctx=ctx)
     check("clip_set menulis via stub + catat anti-loop",
           ok is True and ctx.get("last_server_write") == "halo")
-    ok, msg = core.clip_set("ditolak", {"clipsync": False})
+    ok, msg = core.clip_set("ditolak", ctx={"clipsync": False})
     check("clip_set ditolak saat clipsync off", ok is False)
-    ok, s, msg = core.clip_get()
+    ok, s, img, msg = core.clip_get()
     check("clip_get via stub (ok, str, msg)",
           ok is True and isinstance(s, str) and isinstance(msg, str))
 
