@@ -33,6 +33,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -576,6 +577,9 @@ class ControlActivity : AppCompatActivity() {
 
     // ──────────────────── Clipboard gambar (v3.9) ─────────────────────────
 
+    private fun toast(s: String) =
+        android.widget.Toast.makeText(this, s, android.widget.Toast.LENGTH_SHORT).show()
+
     /** Ambil gambar dari clipboard HP lalu kirim ke PC. */
     private fun copyImageFromClipboard() {
         val cm = getSystemService(android.content.ClipboardManager::class.java)
@@ -584,26 +588,24 @@ class ControlActivity : AppCompatActivity() {
         val bmp = if (uri != null) try {
             android.provider.MediaStore.Images.Media
                 .getBitmap(contentResolver, uri)
-        } catch (_: Exception) { null } else item?.text?.toString()?.let { null }
-        // Fallback: coba dapat bitmap langsung dari clip (bila app menaruh Bitmap).
-        val drawn = bmp ?: (item?.text?.toString()?.let { null })
-        val target = drawn ?: run {
-            // Beberapa launcher menaruh gambar sebagai URI content; di atas sudah
-            // ditangani. Bila tidak ada gambar, beri tahu pengguna.
+        } catch (_: Exception) { null } else null
+        val target = bmp
+        if (target == null) {
             toast("Clipboard HP tidak berisi gambar")
             return
         }
         val baos = java.io.ByteArrayOutputStream()
         target.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, baos)
-        vm.clipSet(baos.toByteArray())
+        ConnectionRepository.getInstance().clipSet(baos.toByteArray())
         toast("Gambar dikirim ke PC")
     }
 
     /** Minta gambar clipboard PC, lalu simpan ke folder Download HP. */
     private fun pasteImageToClipboard() {
-        vm.clipGet()
+        ConnectionRepository.getInstance().clipGet()
         lifecycleScope.launch {
-            val st = vm.clipboardContent.first { it.imgB64 != null || it.ok }
+            val st = ConnectionRepository.getInstance().clipboardContent
+                .first { it.imgB64 != null || it.ok }
             val b64 = st.imgB64
             if (b64.isNullOrEmpty()) {
                 toast("Clipboard PC tidak berisi gambar")
