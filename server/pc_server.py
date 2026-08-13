@@ -49,12 +49,13 @@ from input_core import (CLIENTS, DISCOVERY_PORT, HOSTNAME, LOGQ, PLATFORM,
                         record_failed_attempt, reset_failed_attempts,
                         session_type, volume_get)
 
-APP_VERSION = "3.8"
+APP_VERSION = "3.9"
 
-# Versi APK yang diterima. v3.8 membawa wizard install/uninstall; protokol
-# boleh berubah (tidak ada kewajiban kompatibilitas dengan versi Windows),
-# jadi versi lain ditolak.
-COMPATIBLE_APP_VERSIONS = {"3.8"}
+# Versi APK yang diterima. v3.9 menambah gesture 4 jari, clipboard gambar
+# dua arah, perbaikan power control (caps), dan media_result. Protokol boleh
+# berubah (tidak ada kewajiban kompatibilitas dengan versi Windows), jadi
+# versi lain ditolak.
+COMPATIBLE_APP_VERSIONS = {"3.9"}
 
 # RSA-2048 keypair: digenerate sekali saat server start.
 _RSA_KEYPAIR = None
@@ -693,11 +694,21 @@ def run_gui(minimized=False):
                 state["tray"].stop()
             except Exception:                                  # noqa: BLE001
                 pass
-        core.BACKEND.close()
-        root.destroy()
+        try:
+            core.BACKEND.close()
+        except Exception:                                      # noqa: BLE001
+            pass
+        try:
+            root.destroy()
+        except Exception:                                       # noqa: BLE001
+            pass
+        # Pastikan seluruh proses server (termasuk thread asyncio) benar-benar
+        # berhenti, bukan cuma menyembunyikan window.
+        os._exit(0)
 
     flat_btn(btnbar, "Ke Tray", hide_to_tray)
-    root.protocol("WM_DELETE_WINDOW", hide_to_tray)
+    # Tombol X tutup window DAN mematikan proses server (bukan ke tray).
+    root.protocol("WM_DELETE_WINDOW", quit_app)
 
     frame_auto = tk.Frame(root, bg=BG)
     frame_auto.pack(fill="x", padx=22, pady=(2, 6))

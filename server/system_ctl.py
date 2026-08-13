@@ -279,11 +279,22 @@ def _screen_off():
 
 
 def supported_power_actions():
-    """Daftar aksi daya yang benar-benar bisa dijalankan di mesin ini."""
+    """Daftar aksi daya yang benar-benar bisa dijalankan di mesin ini.
+
+    Penting: kita melaporkan aksi yang SECARA PRINSIP tersedia di sesi ini,
+    bukan cuma yang lolos tes `systemctl can-*` saat ini. Di Wayland/systemd
+    modern, `systemctl can-power-off` dkk sering mengembalikan "challenge"
+    (butuh polkit interaktif) sehingga `_can()` false — padahal aksi itu
+    bisa dijalankan saat tombol ditekan (polkit mengizinkan pengguna sesi
+    aktif mematikan mesinnya sendiri). Bila polkit menolak, `power_action()`
+    tetap mengembalikan pesan error yang ditampilkan ke HP. Menyatakan aksi
+    "tidak didukung" secara keliru membuat tombol di APK TEREDUPKAN padahal
+    sebenarnya bisa jalan (regresi: "hanya lock yang jalan").
+    """
     out = []
-    for act in ("shutdown", "restart", "sleep", "hibernate"):
-        if _can(act):
-            out.append(act)
+    # systemd ada -> poweroff/reboot/suspend/hibernate tersedia di desktop normal.
+    if _has("systemctl"):
+        out += ["shutdown", "restart", "sleep", "hibernate"]
     if _has("loginctl") or _has("xdg-screensaver") or _has("swaylock"):
         out.append("lock")
     if (_has("gnome-session-quit") or _has("qdbus")
@@ -293,7 +304,9 @@ def supported_power_actions():
     if (_session_type() == "x11" and _has("xset")) or _has("swaymsg") \
             or _has("hyprctl"):
         out.append("screenoff")
-    return out
+    # Hilangkan duplikat sambil mempertahankan urutan.
+    seen = set()
+    return [a for a in out if not (a in seen or seen.add(a))]
 
 
 def power_action(action):

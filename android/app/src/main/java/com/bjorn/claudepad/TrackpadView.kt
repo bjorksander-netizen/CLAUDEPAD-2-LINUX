@@ -154,6 +154,10 @@ class TrackpadView @JvmOverloads constructor(
     private var threeStartX = 0f
     private var threeStartY = 0f
 
+    private var fourFingerFired = false
+    private var fourStartX = 0f
+    private var fourStartY = 0f
+
     private val tapTimeout = 250L
     private val doubleTapTimeout = 300L
     private val touchSlop = 24f
@@ -305,6 +309,7 @@ class TrackpadView @JvmOverloads constructor(
                 scrollProbeX = 0f
                 scrollProbeY = 0f
                 threeFingerFired = false
+                fourFingerFired = false
                 if (downTime - lastTapTime < doubleTapTimeout) {
                     dragging = true
                     Haptics.medium()
@@ -321,6 +326,11 @@ class TrackpadView @JvmOverloads constructor(
                     threeStartX = e.getX(0)
                     threeStartY = e.getY(0)
                     threeFingerFired = false
+                } else if (e.pointerCount == 4) {
+                    // 4 jari: switch workspace / task view sesuai arah swipe.
+                    fourStartX = e.getX(0)
+                    fourStartY = e.getY(0)
+                    fourFingerFired = false
                 }
             }
 
@@ -330,6 +340,24 @@ class TrackpadView @JvmOverloads constructor(
                 if (abs(x - downX) > touchSlop || abs(y - downY) > touchSlop) moved = true
 
                 when {
+                    // ---- 4 jari: switch workspace / task view ----
+                    e.pointerCount >= 4 -> {
+                        if (!fourFingerFired) {
+                            val gx = x - fourStartX
+                            val gy = y - fourStartY
+                            if (abs(gx) > threeSwipeMin || abs(gy) > threeSwipeMin) {
+                                val g = if (abs(gx) > abs(gy)) {
+                                    if (gx > 0) "workspace_next" else "workspace_prev"
+                                } else {
+                                    if (gy < 0) "taskview" else "showdesktop"
+                                }
+                                fourFingerFired = true
+                                Haptics.heavy()
+                                listener?.onGesture(g)
+                            }
+                        }
+                    }
+
                     // ---- 3 jari: gesture sistem ----
                     e.pointerCount >= 3 -> {
                         if (!threeFingerFired) {
@@ -398,8 +426,10 @@ class TrackpadView @JvmOverloads constructor(
                     dragging = false
                     Haptics.light()
                     listener?.onDragEnd()
-                } else if (!moved && !threeFingerFired && now - downTime < tapTimeout) {
+                } else if (!moved && !threeFingerFired && !fourFingerFired
+                        && now - downTime < tapTimeout) {
                     when {
+                        maxPointers >= 4 -> { /* gesture 4 jari, bukan klik */ }
                         maxPointers >= 3 -> { Haptics.medium(); listener?.onMiddleClick() }
                         maxPointers == 2 -> { Haptics.light(); listener?.onRightClick() }
                         else -> { Haptics.light(); listener?.onLeftClick(); lastTapTime = now }

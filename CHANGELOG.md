@@ -1,9 +1,27 @@
 # Changelog
 
+## v3.9 — gesture 4 jari, clipboard gambar, perbaikan power/media
+
+- **Fitur baru**
+  - Gesture 4 jari di trackpad: swipe kiri/kanan = ganti workspace
+    (`workspace_prev`/`workspace_next`), atas/bawah = task view / show desktop.
+  - Clipboard gambar dua arah (PNG): "copy image" kirim gambar clipboard HP ke
+    PC, "paste image" simpan gambar clipboard PC ke folder Download HP.
+- **Perbaikan**
+  - Power control: `caps.power` kini melaporkan aksi yang benar-benar tersedia
+    di sesi (systemd/loginctl) sehingga tombol matikan/restart/tidur/hibernasi/
+    keluar sesi tidak lagi TEREDUPKAN ("hanya lock yang jalan" teratasi).
+  - Media control: server membalas `media_result` agar APK bisa menampilkan
+    toast bila perintah media gagal (tidak diam).
+  - Tray: tombol "Ke Tray" tetap ada; tombol X (tutup window) kini mematikan
+    proses server, bukan cuma bersembunyi.
+- **Internal**: `clip_set`/`clip_get` dukung field `img` (base64 PNG);
+  `build-apk.yml` menjalankan `test_media`, `test_gesture4`, `test_clip_image`.
+
 ## v3.8 — wizard install & uninstall (PC Linux)
 
 Logika pemasangan/penghapusan diport dari bash (`install.sh`/`uninstall.sh`)
-ke Python murni (`setup_core.py`) dan diberi wizard grafis (`wizard.py`):
+ke Python murni (`setup_core.py`) dan diberi wizard grafis (`wizard.py`).
 
 ### Fitur baru
 

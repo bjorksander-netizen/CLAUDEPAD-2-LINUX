@@ -61,6 +61,16 @@ jobs:
         working-directory: server
         run: python tests/test_setup.py
 
+      - name: Uji media control & gesture 4 jari
+        working-directory: server
+        run: |
+          python tests/test_media.py
+          python tests/test_gesture4.py
+
+      - name: Uji clipboard gambar 2 arah
+        working-directory: server
+        run: python tests/test_clip_image.py
+
       - name: Uji protokol end-to-end
         working-directory: server
         run: python tests/test_e2e.py

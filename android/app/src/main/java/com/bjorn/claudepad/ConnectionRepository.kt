@@ -113,6 +113,8 @@ class ConnectionRepository private constructor() {
     // ──────────────────────────── v3.7: clipboard & now playing ──────────
 
     fun clipSet(s: String) = WsClient.clipSet(s)
+    /** v3.9: kirim gambar (PNG bytes) ke PC. */
+    fun clipSet(img: ByteArray) = WsClient.clipSet(img)
     fun clipGet() = WsClient.clipGet()
     fun clipSync(on: Boolean) = WsClient.clipSync(on)
     fun npGet() = WsClient.npGet()

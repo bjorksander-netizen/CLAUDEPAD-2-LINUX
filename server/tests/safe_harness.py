@@ -236,6 +236,13 @@ def activate():
     global _ACTIVE
     if _ACTIVE:
         return
+    # Pastikan modul server (server/) bisa diimpor walau test dijalankan
+    # dari direktori mana pun (mis. `python tests/test_x.py` dari server/).
+    import os as _os
+    import sys as _sys
+    _server_dir = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+    if _server_dir not in _sys.path:
+        _sys.path.insert(0, _server_dir)
     import clipboard
     import input_core
     import mpris

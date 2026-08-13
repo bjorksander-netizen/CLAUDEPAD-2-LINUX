@@ -92,11 +92,13 @@ object WsClient {
             powerActions?.contains(action) ?: true
     }
 
-    /** Status clipboard di PC, hasil {"t":"clip"} dari server (v3.7). */
+    /** Status clipboard di PC, hasil {"t":"clip"} dari server (v3.7+). */
     data class ClipboardState(
         val content: String? = null,
         val ok: Boolean = false,
-        val auto: Boolean = false
+        val auto: Boolean = false,
+        /** v3.9: gambar clipboard PC dalam bentuk base64 PNG (null kalau teks). */
+        val imgB64: String? = null
     )
 
     /** Info lagu yang sedang diputar di PC, hasil {"t":"np"} (v3.7). */
@@ -317,6 +319,12 @@ object WsClient {
     /** Kirim teks clipboard HP ke PC. */
     fun clipSet(s: String) = send(JSONObject().put("t", "clipset").put("s", s))
 
+    /** Kirim gambar clipboard HP ke PC (PNG bytes, di-base64-kan). */
+    fun clipSet(img: ByteArray) {
+        val b64 = android.util.Base64.encodeToString(img, android.util.Base64.NO_WRAP)
+        send(JSONObject().put("t", "clipset").put("img", b64))
+    }
+
     /** Minta isi clipboard PC (server akan balas {"t":"clip",...}). */
     fun clipGet() = send("clipget")
 
@@ -535,12 +543,15 @@ object WsClient {
             "clip" -> {
                 val hasS = o.has("s") && !o.isNull("s")
                 val s = if (hasS) o.optString("s") else null
+                val img = if (o.has("img") && !o.isNull("img")) o.optString("img") else null
                 // Push otomatis dari server {"t":"clip","s":...,"auto":true}
-                // tidak menyertakan "ok" — kehadiran "s" yang valid cukup
+                // tidak menyertakan "ok" - kehadiran "s"/"img" yang valid cukup
                 // untuk menganggap pesan ini sah.
-                val ok = if (o.has("ok")) o.optBoolean("ok", false) else !s.isNullOrEmpty()
+                val ok = if (o.has("ok")) o.optBoolean("ok", false)
+                         else !(s.isNullOrEmpty() && img.isNullOrEmpty())
                 val auto = o.optBoolean("auto", false)
-                _clipboardContent.value = ClipboardState(content = s, ok = ok, auto = auto)
+                _clipboardContent.value = ClipboardState(
+                    content = s, ok = ok, auto = auto, imgB64 = img)
                 // Diteruskan supaya ClipboardSync bisa menulis ke clipboard HP.
                 _serverMessages.tryEmit(o)
                 onMessage?.invoke(o)

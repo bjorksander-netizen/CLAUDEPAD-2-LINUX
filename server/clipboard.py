@@ -10,7 +10,7 @@ konten yang barusan ditulis sendiri") diurus oleh poller per-koneksi di
 pc_server.py; modul ini tidak menyimpan state sama sekali.
 
 Keamanan (OPEN-CONVENTIONS Bagian 4): saat mode sandbox aktif, write
-disimulasikan dan read mengembalikan string kosong - TIDAK ada subprocess
+disimulasikan dan read mengembalikan string kosong / None - TIDAK ada subprocess
 yang dijalankan, sehingga test/harness tidak pernah menyentuh clipboard
 desktop pengguna.
 """
@@ -73,6 +73,28 @@ def _run_with_input(args, text, timeout=5):
         p.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
         # xclip/xsel menjaga seleksi sebagai daemon - itu sukses, bukan gagal.
+        return 0, ""
+    return p.returncode, ""
+
+
+def _run_with_input_bytes(args, data, timeout=5):
+    """Sama seperti _run_with_input, tapi menulis bytes (gambar PNG)."""
+    try:
+        p = subprocess.Popen(args, stdin=subprocess.PIPE,
+                             stdout=subprocess.DEVNULL,
+                             stderr=subprocess.PIPE)
+    except FileNotFoundError:
+        return 127, f"{args[0]} tidak ditemukan"
+    except Exception:                                          # noqa: BLE001
+        return 1, "gagal"
+    try:
+        p.stdin.write(data)
+        p.stdin.close()
+    except (BrokenPipeError, OSError):
+        pass
+    try:
+        p.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
         return 0, ""
     return p.returncode, ""
 
@@ -141,6 +163,60 @@ def write(text):
             rc, _ = _run_with_input(["xclip", "-selection", "clipboard"], text)
             return rc == 0
         rc, _ = _run_with_input(["xsel", "--clipboard", "--input"], text)
+        return rc == 0
+    except Exception:                                          # noqa: BLE001
+        return False
+
+
+def read_image():
+    """
+    Baca gambar dari clipboard PC. Mengembalikan bytes PNG, atau None kalau
+    kosong / bukan gambar / tool tidak ada. Di mode sandbox: None tanpa
+    subprocess.
+    """
+    if _sandbox():
+        _log("sandbox: simulasi clipboard.read_image() -> None")
+        return None
+    tool = _tool()
+    if not tool:
+        return None
+    try:
+        if tool == "wl":
+            rc, out = _run(["wl-paste", "--type", "image/png"], timeout=5)
+            return out if rc == 0 and out else None
+        if tool == "xclip":
+            rc, out = _run(["xclip", "-selection", "clipboard",
+                            "-t", "image/png", "-o"], timeout=5)
+            return out if rc == 0 and out else None
+        rc, out = _run(["xsel", "--clipboard", "--type", "image/png",
+                        "--output"], timeout=5)
+        return out if rc == 0 and out else None
+    except Exception:                                          # noqa: BLE001
+        return None
+
+
+def write_image(data: bytes):
+    """
+    Tulis gambar (bytes PNG) ke clipboard PC. True kalau berhasil (atau
+    disimulasikan). Di mode sandbox: log + True, tanpa menyentuh sistem.
+    """
+    if _sandbox():
+        _log(f"sandbox: simulasi clipboard.write_image({len(data)} byte)")
+        return True
+    tool = _tool()
+    if not tool:
+        return False
+    try:
+        if tool == "wl":
+            rc, _ = _run_with_input_bytes(
+                ["wl-copy", "--type", "image/png"], data)
+            return rc == 0
+        if tool == "xclip":
+            rc, _ = _run_with_input_bytes(
+                ["xclip", "-selection", "clipboard", "-t", "image/png"], data)
+            return rc == 0
+        rc, _ = _run_with_input_bytes(
+            ["xsel", "--clipboard", "--type", "image/png", "--input"], data)
         return rc == 0
     except Exception:                                          # noqa: BLE001
         return False

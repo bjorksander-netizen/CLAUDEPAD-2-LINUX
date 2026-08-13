@@ -671,30 +671,40 @@ _GESTURE_DEFAULTS = {
         "showdesktop": {"key": "d", "mods": ["win"]},
         "appnext":     {"key": "tab", "mods": ["alt"]},
         "appprev":     {"key": "tab", "mods": ["alt", "shift"]},
+        "workspace_next": {"key": "right", "mods": ["ctrl", "alt"]},
+        "workspace_prev": {"key": "left", "mods": ["ctrl", "alt"]},
     },
     "kde": {
         "taskview":    {"key": "w", "mods": ["ctrl"]},
         "showdesktop": {"key": "d", "mods": ["ctrl", "alt"]},
         "appnext":     {"key": "tab", "mods": ["alt"]},
         "appprev":     {"key": "tab", "mods": ["alt", "shift"]},
+        "workspace_next": {"key": "right", "mods": ["ctrl", "alt"]},
+        "workspace_prev": {"key": "left", "mods": ["ctrl", "alt"]},
     },
     "xfce": {
         "taskview":    {"key": "w", "mods": ["ctrl", "alt"]},
         "showdesktop": {"key": "d", "mods": ["ctrl", "alt"]},
         "appnext":     {"key": "tab", "mods": ["alt"]},
         "appprev":     {"key": "tab", "mods": ["alt", "shift"]},
+        "workspace_next": {"key": "right", "mods": ["ctrl", "alt"]},
+        "workspace_prev": {"key": "left", "mods": ["ctrl", "alt"]},
     },
     "cinnamon": {
         "taskview":    {"key": "up", "mods": ["ctrl", "alt"]},
         "showdesktop": {"key": "d", "mods": ["win"]},
         "appnext":     {"key": "tab", "mods": ["alt"]},
         "appprev":     {"key": "tab", "mods": ["alt", "shift"]},
+        "workspace_next": {"key": "right", "mods": ["ctrl", "alt"]},
+        "workspace_prev": {"key": "left", "mods": ["ctrl", "alt"]},
     },
     "unknown": {
         "taskview":    {"key": "win", "mods": []},
         "showdesktop": {"key": "d", "mods": ["win"]},
         "appnext":     {"key": "tab", "mods": ["alt"]},
         "appprev":     {"key": "tab", "mods": ["alt", "shift"]},
+        "workspace_next": {"key": "right", "mods": ["ctrl", "alt"]},
+        "workspace_prev": {"key": "left", "mods": ["ctrl", "alt"]},
     },
 }
 
@@ -957,9 +967,10 @@ def _wifi_device():
 
 
 # ============================================================= Dispatch ======
-def clip_set(text, ctx=None):
+def clip_set(text=None, img_b64=None, ctx=None):
     """
-    Tulis teks ke clipboard PC. `ctx` adalah dict state per-koneksi dari
+    Tulis ke clipboard PC. Bisa teks (`text`) atau gambar (`img_b64` adalah
+    string base64 PNG). `ctx` adalah dict state per-koneksi dari
     pc_server.handle() (bukan global): {clipsync, last_server_write}.
 
     Saat sinkronisasi clipboard nonaktif untuk koneksi ini, permintaan
@@ -968,17 +979,38 @@ def clip_set(text, ctx=None):
     """
     if ctx is not None and not ctx.get("clipsync", True):
         return False, "sinkronisasi clipboard nonaktif (clipsync off)"
-    if not clipboard.write(text):
-        return False, "tidak bisa menulis clipboard (tool clipboard tidak ada)"
-    if ctx is not None:
-        ctx["last_server_write"] = text
-    return True, ""
+    if img_b64 is not None:
+        try:
+            import base64
+            data = base64.b64decode(img_b64)
+        except Exception:                                      # noqa: BLE001
+            return False, "gambar tidak valid (bukan base64)"
+        if not clipboard.write_image(data):
+            return False, "tidak bisa menulis gambar ke clipboard"
+        if ctx is not None:
+            ctx["last_server_write"] = "[image]"
+        return True, ""
+    if text is not None:
+        if not clipboard.write(text):
+            return False, "tidak bisa menulis clipboard (tool clipboard tidak ada)"
+        if ctx is not None:
+            ctx["last_server_write"] = text
+        return True, ""
+    return False, "tidak ada konten (text/img)"
 
 
 def clip_get():
-    """Baca isi clipboard PC saat ini: (ok, teks, msg)."""
+    """
+    Baca isi clipboard PC saat ini. Mengembalikan (ok, teks, img_b64, msg).
+    Kalau clipboard berisi gambar, `img_b64` berisi base64 PNG dan `teks`
+    kosong; jika teks, sebaliknya.
+    """
+    data = clipboard.read_image()
+    if data:
+        import base64
+        return True, "", base64.b64encode(data).decode("ascii"), ""
     s = clipboard.read()
-    return True, s, ""
+    return True, s, None, ""
 
 
 def handle_message(m, reply, ctx=None):
@@ -1015,6 +1047,10 @@ def handle_message(m, reply, ctx=None):
             pass
         elif action in MEDIA_EVDEV:
             media_key(action)
+            reply({"t": "media_result", "a": action, "ok": True})
+        else:
+            reply({"t": "media_result", "a": action, "ok": False,
+                   "msg": "aksi media tidak dikenal"})
     elif t == "volset":
         if not volume_set(m.get("v", 50)):
             reply({"t": "volerr"})
@@ -1034,11 +1070,18 @@ def handle_message(m, reply, ctx=None):
         ok, msg = toggle_radio(which)
         reply({"t": "radio_result", "d": which, "ok": ok, "msg": msg})
     elif t == "clipset":
-        ok, msg = clip_set(str(m.get("s") or ""), ctx)
+        img = m.get("img")
+        if img is not None:
+            ok, msg = clip_set(img_b64=str(img), ctx=ctx)
+        else:
+            ok, msg = clip_set(text=str(m.get("s") or ""), ctx=ctx)
         reply({"t": "clipset_result", "ok": ok, "msg": msg})
     elif t == "clipget":
-        ok, s, msg = clip_get()
-        reply({"t": "clip", "ok": ok, "s": s, "msg": msg})
+        ok, s, img, msg = clip_get()
+        if img is not None:
+            reply({"t": "clip", "ok": ok, "img": img, "msg": msg})
+        else:
+            reply({"t": "clip", "ok": ok, "s": s, "msg": msg})
     elif t == "clipsync":
         on = bool(m.get("on", True))
         if ctx is not None:

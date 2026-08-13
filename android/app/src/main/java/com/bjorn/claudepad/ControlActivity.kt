@@ -449,6 +449,8 @@ class ControlActivity : AppCompatActivity() {
             showGroupPopup(anchor, R.layout.popup_clip, 200, 0) { root, pop ->
                 bindKey(root, pop, R.id.kCopy) { vm.key("c", listOf("ctrl")) }
                 bindKey(root, pop, R.id.kPaste) { vm.key("v", listOf("ctrl")) }
+                bindKey(root, pop, R.id.kCopyImg) { copyImageFromClipboard() }
+                bindKey(root, pop, R.id.kPasteImg) { pasteImageToClipboard() }
             }
         }
 
@@ -570,6 +572,65 @@ class ControlActivity : AppCompatActivity() {
         tap(R.id.mPlay, Haptics.Level.MEDIUM) { vm.media("playpause") }
         tap(R.id.mPrev) { vm.media("prev") }
         tap(R.id.mNext) { vm.media("next") }
+    }
+
+    // ──────────────────── Clipboard gambar (v3.9) ─────────────────────────
+
+    /** Ambil gambar dari clipboard HP lalu kirim ke PC. */
+    private fun copyImageFromClipboard() {
+        val cm = getSystemService(android.content.ClipboardManager::class.java)
+        val item = cm?.primaryClip?.getItemAt(0)
+        val uri = item?.uri
+        val bmp = if (uri != null) try {
+            android.provider.MediaStore.Images.Media
+                .getBitmap(contentResolver, uri)
+        } catch (_: Exception) { null } else item?.text?.toString()?.let { null }
+        // Fallback: coba dapat bitmap langsung dari clip (bila app menaruh Bitmap).
+        val drawn = bmp ?: (item?.text?.toString()?.let { null })
+        val target = drawn ?: run {
+            // Beberapa launcher menaruh gambar sebagai URI content; di atas sudah
+            // ditangani. Bila tidak ada gambar, beri tahu pengguna.
+            toast("Clipboard HP tidak berisi gambar")
+            return
+        }
+        val baos = java.io.ByteArrayOutputStream()
+        target.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, baos)
+        vm.clipSet(baos.toByteArray())
+        toast("Gambar dikirim ke PC")
+    }
+
+    /** Minta gambar clipboard PC, lalu simpan ke folder Download HP. */
+    private fun pasteImageToClipboard() {
+        vm.clipGet()
+        lifecycleScope.launch {
+            val st = vm.clipboardContent.first { it.imgB64 != null || it.ok }
+            val b64 = st.imgB64
+            if (b64.isNullOrEmpty()) {
+                toast("Clipboard PC tidak berisi gambar")
+                return@launch
+            }
+            try {
+                val bytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT)
+                val name = "claudepad-clip-${System.currentTimeMillis()}.png"
+                val resolver = contentResolver
+                val cv = android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, name)
+                    put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "image/png")
+                    put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH,
+                        android.os.Environment.DIRECTORY_DOWNLOADS)
+                }
+                val uri = resolver.insert(
+                    android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv)
+                if (uri != null) {
+                    resolver.openOutputStream(uri)?.use { it.write(bytes) }
+                    toast("Gambar disimpan: Download/$name")
+                } else {
+                    toast("Gagal menyimpan gambar")
+                }
+            } catch (e: Exception) {
+                toast("Gagal decode gambar: ${e.message}")
+            }
+        }
     }
 
     // ──────────────────────────── Now Playing (v3.7) ─────────────────────

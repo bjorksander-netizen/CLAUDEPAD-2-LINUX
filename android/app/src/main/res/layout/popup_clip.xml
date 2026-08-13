@@ -14,4 +14,14 @@
         android:layout_width="match_parent" android:layout_height="52dp"
         android:layout_marginTop="8dp"
         android:text="⎘  paste" android:textSize="15sp" />
+
+    <TextView android:id="@+id/kCopyImg" style="@style/KeyGlass"
+        android:layout_width="match_parent" android:layout_height="52dp"
+        android:layout_marginTop="8dp"
+        android:text="🖼  copy image" android:textSize="15sp" />
+
+    <TextView android:id="@+id/kPasteImg" style="@style/KeyGlass"
+        android:layout_width="match_parent" android:layout_height="52dp"
+        android:layout_marginTop="8dp"
+        android:text="🖼  paste image" android:textSize="15sp" />
 </LinearLayout>

@@ -217,6 +217,14 @@ class ControlViewModel(application: Application) : AndroidViewModel(application)
                 _toastHapticOk.value = ok
                 _toastMessage.value = msgText
             }
+            "media_result" -> {
+                // Konfirmasi server bahwa perintah media diterima. Kalau gagal,
+                // tampilkan pesan (mis. aksi tidak dikenal) supaya tidak diam.
+                if (!msg.optBoolean("ok", true)) {
+                    _toastHapticOk.value = false
+                    _toastMessage.value = msg.optString("msg", "perintah media gagal")
+                }
+            }
             "radio_result" -> {
                 val msgText = msg.optString("msg")
                 val ok = msg.optBoolean("ok")
