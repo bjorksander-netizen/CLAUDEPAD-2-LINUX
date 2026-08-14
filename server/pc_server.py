@@ -49,10 +49,11 @@ from input_core import (CLIENTS, DISCOVERY_PORT, HOSTNAME, LOGQ, PLATFORM,
                         record_failed_attempt, reset_failed_attempts,
                         session_type, volume_get)
 
-APP_VERSION = "3.9.1"
+APP_VERSION = "3.9.2"
 
-# Versi APK yang diterima. v3.9.1 memperbaiki NPE paste-image di APK.
-COMPATIBLE_APP_VERSIONS = {"3.9.1"}
+# Versi APK yang diterima. v3.9.2 memperbaiki read_image (bytes) & media_result
+# saat mute sukses.
+COMPATIBLE_APP_VERSIONS = {"3.9.2"}
 
 # RSA-2048 keypair: digenerate sekali saat server start.
 _RSA_KEYPAIR = None

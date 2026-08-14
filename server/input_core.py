@@ -1044,7 +1044,7 @@ def handle_message(m, reply, ctx=None):
         # Mute lewat mixer lebih andal daripada tombol media, karena tidak
         # semua desktop memasang pintasan XF86AudioMute.
         if action == "mute" and volume_mute_toggle():
-            pass
+            reply({"t": "media_result", "a": action, "ok": True})
         elif action in MEDIA_EVDEV:
             media_key(action)
             reply({"t": "media_result", "a": action, "ok": True})

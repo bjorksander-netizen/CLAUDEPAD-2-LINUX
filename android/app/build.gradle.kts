@@ -11,8 +11,8 @@ android {
         applicationId = "com.bjorn.claudepad"
         minSdk = 24
         targetSdk = 34
-        versionCode = 24
-        versionName = "3.9.1"
+        versionCode = 25
+        versionName = "3.9.2"
     }
 
     buildTypes {

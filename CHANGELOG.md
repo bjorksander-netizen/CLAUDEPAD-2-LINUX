@@ -1,5 +1,15 @@
 # Changelog
 
+## v3.9.2 — perbaikan clipboard gambar read & media_result mute
+
+- **Bug fix (server)**: `clipboard.read_image()` kini menangkap stdout sebagai
+  bytes (`_run_bytes`), bukan teks — PNG biner tidak lagi rusak saat di-decode,
+  sehingga clipboard gambar **dua arah** benar-benar jalan (sebelumnya read
+  selalu `None`).
+- **Bug fix (server)**: `handle_message` cabang `media` membalas `media_result`
+  saat mute sukses (sebelumnya diam → klien menggantung).
+- Versi server & APK diselaraskan ke 3.9.2.
+
 ## v3.9.1 — perbaikan NPE paste-image (APK)
 
 - **Bug fix**: `pasteImageToClipboard` di APK tidak lagi NPE saat clipboard PC

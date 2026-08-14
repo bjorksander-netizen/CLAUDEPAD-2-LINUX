@@ -77,6 +77,24 @@ def _run_with_input(args, text, timeout=5):
     return p.returncode, ""
 
 
+def _run_bytes(args, timeout=10):
+    """Sama seperti _run, tapi menangkap stdout sebagai bytes (bukan teks).
+
+    Penting untuk gambar: PNG adalah data biner, dan decode UTF-8 di _run
+    (text=True) akan merusak / memotong byte yang tidak valid sehingga
+    read_image mengembalikan None. Runner ini mengembalikan (rc, bytes).
+    """
+    try:
+        r = subprocess.run(args, capture_output=True, timeout=timeout)
+        return r.returncode, r.stdout or b""
+    except FileNotFoundError:
+        return 127, b""
+    except subprocess.TimeoutExpired:
+        return 124, b""
+    except Exception:                                          # noqa: BLE001
+        return 1, b""
+
+
 def _run_with_input_bytes(args, data, timeout=5):
     """Sama seperti _run_with_input, tapi menulis bytes (gambar PNG)."""
     try:
@@ -182,14 +200,14 @@ def read_image():
         return None
     try:
         if tool == "wl":
-            rc, out = _run(["wl-paste", "--type", "image/png"], timeout=5)
+            rc, out = _run_bytes(["wl-paste", "--type", "image/png"], timeout=5)
             return out if rc == 0 and out else None
         if tool == "xclip":
-            rc, out = _run(["xclip", "-selection", "clipboard",
-                            "-t", "image/png", "-o"], timeout=5)
+            rc, out = _run_bytes(["xclip", "-selection", "clipboard",
+                                  "-t", "image/png", "-o"], timeout=5)
             return out if rc == 0 and out else None
-        rc, out = _run(["xsel", "--clipboard", "--type", "image/png",
-                        "--output"], timeout=5)
+        rc, out = _run_bytes(["xsel", "--clipboard", "--type", "image/png",
+                              "--output"], timeout=5)
         return out if rc == 0 and out else None
     except Exception:                                          # noqa: BLE001
         return None
