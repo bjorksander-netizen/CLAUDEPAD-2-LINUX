@@ -1,5 +1,11 @@
 # Changelog
 
+## v3.9.1 — perbaikan NPE paste-image (APK)
+
+- **Bug fix**: `pasteImageToClipboard` di APK tidak lagi NPE saat clipboard PC
+  berisi teks (predikat menunggu `imgB64 != null`, bukan `|| ok`).
+- Versi server & APK diselaraskan ke 3.9.1.
+
 ## v3.9 — gesture 4 jari, clipboard gambar, perbaikan power/media
 
 - **Fitur baru**

@@ -604,8 +604,11 @@ class ControlActivity : AppCompatActivity() {
     private fun pasteImageToClipboard() {
         ConnectionRepository.getInstance().clipGet()
         lifecycleScope.launch {
+            // Tunggu SAMPAI ada gambar sungguhan. Predikat `imgB64 != null`
+            // (bukan `|| it.ok`) supaya clipboard teks (ok=true, imgB64=null)
+            // tidak memicu Base64.decode(null) -> NPE.
             val st = ConnectionRepository.getInstance().clipboardContent
-                .first { it.imgB64 != null || it.ok }
+                .first { it.imgB64 != null }
             val b64 = st.imgB64
             if (b64.isNullOrEmpty()) {
                 toast("Clipboard PC tidak berisi gambar")
